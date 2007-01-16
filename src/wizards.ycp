@@ -1,0 +1,100 @@
+/**
+ * File:	include/slepos-system-manager/wizards.ycp
+ * Package:	Configuration of slepos-system-manager
+ * Summary:	Wizards definitions
+ * Authors:	Michael G. Fritch <mgfritch@novell.com>
+ *
+ * $Id: wizards.ycp,v 1.6 2004/02/05 11:29:30 msvec Exp $
+ */
+
+{
+
+textdomain "slepos-system-manager";
+
+import "Sequencer";
+import "Wizard";
+
+include "slepos-system-manager/complex.ycp";
+include "slepos-system-manager/dialogs.ycp";
+
+/**
+ * Main workflow of the slepos-system-manager configuration
+ * @return sequence result
+ */
+any MainSequence() {
+
+	map aliases = $[
+		"admin" : ``(RunSystemManagerDialogs()),
+	];
+
+	map sequence = $[
+		"ws_start" : "admin",
+		"admin" : $[
+			`abort	: `abort,
+			`next	: `next,
+		],
+	];
+
+	any ret = Sequencer::Run(aliases, sequence);
+
+	return ret;
+}
+
+/**
+ * Whole configuration of slepos-system-manager
+ * @return sequence result
+ */
+any SleposSystemManagerSequence() {
+
+	map aliases = $[
+		"read"		: [ ``( ReadDialog() ), true ],
+		"main"		:   ``( MainSequence() ),
+	];
+
+	map sequence = $[
+		"ws_start" : "read",
+		"read" : $[
+			`abort	: `abort,
+			`next	: "main"
+		],
+		"main" : $[
+			`abort	: `abort,
+			`next	: `next
+		]
+	];
+
+	Wizard::CreateDialog();
+	Wizard::SetDesktopIcon("slepos-system-manager");
+
+	any ret = Sequencer::Run(aliases, sequence);
+
+	UI::CloseDialog();
+	return ret;
+}
+
+/**
+ * Whole configuration of slepos-system-manager but without reading and writing.
+ * For use with autoinstallation.
+ * @return sequence result
+ */
+any SleposSystemManagerAutoSequence() {
+
+	/* Initialization dialog caption */
+	string caption = _("SleposSystemManager Configuration");
+	/* Initialization dialog contents */
+	term contents = `Label(_("Initializing..."));
+
+	Wizard::CreateDialog();
+	Wizard::SetDesktopIcon("slepos-system-manager");
+
+	Wizard::SetContentsButtons(caption, contents, "",
+		Label::BackButton(), Label::NextButton());
+
+	any ret = MainSequence();
+
+	UI::CloseDialog();
+	return ret;
+}
+
+/* EOF */
+}

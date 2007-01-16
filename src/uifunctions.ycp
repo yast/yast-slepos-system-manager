@@ -1,0 +1,876 @@
+/**
+ * File:        slepos-system-manager/uifunctions.ycp
+ * Package:     Configuration slepos-system-manager
+ * Summary:     Configuration dialogs handling functions
+ * Authors:     Michael G. Fritch <mgfritch@novell.com>
+ *
+ * $Id: uifunctions.ycp 22002 2005-02-28 13:36:28Z locilka $
+ *
+ * Configuration dialogs handling.
+ * Both Expert and Simple.
+ */
+{
+
+textdomain "slepos-system-manager";
+
+import "Popup";
+import "Wizard";
+import "SleposSystemManager";
+import "Map";
+
+include "slepos-system-manager/subdialogs.ycp";
+include "slepos-system-manager/subwizards.ycp";
+
+
+// EXAMPLE FUNCTIONS
+/**
+ *	void ExampleInit(string key) {
+ *		y2milestone("Example Init");
+ *	}
+ *
+ *	symbol ExampleHandle(string key, map event) {
+ *		any ret = event["ID"]:nil;
+ *		y2milestone("Example Handle");
+ *		return nil;
+ *	}
+ *
+ *	void ExampleStore(string key, map event) {
+ *		any ret = event["ID"]:nil;
+ *		y2milestone("Example Store");
+ *	}
+ *
+ */
+
+
+
+/**
+ * Check is a given text widget has been completed, disply error if widget is empty
+ * @param sting id of widget
+ * @return boolean false if widget is empty
+ */
+boolean CheckExistency(string ui_id) {
+	if (UI::QueryWidget(`id(ui_id), `Value) == "") {
+	    UI::SetFocus(`id(ui_id));
+	    // TRANSLATORS: popup message
+	    Popup::Error(_("This entry must be completed."));
+	    return false;
+	}
+	return true;
+}
+
+
+/**
+ * General function for initializing a table dialog
+ */
+void InitTableDialog() {
+	Wizard::HideAbortButton();
+	Wizard::HideBackButton();
+	Wizard::SetNextButton(`abort, _("&Close"));
+	Wizard::SetDesktopIcon("slepos-system-manager");
+}
+
+/**
+ * General function for handling a popup to remove an LDAP object
+ * @param string object_key (DN)
+ * @return dialog result
+ */
+symbol HandlePopupRemoveTableObject (string object_key) {
+	SleposSystemManager::temp_ldap_object = SleposSystemManager::getObjectFromList(object_key, SleposSystemManager::known_ldap_objects); // grab the object from the list of LDAP objects	
+	string objectClass = SleposSystemManager::getObjectValue("objectClass", SleposSystemManager::temp_ldap_object);
+	string displayObjectClass = SleposSystemManager::ReturnTextForObjectClass(objectClass);
+	if ( Popup::YesNo(sformat(_("Are you sure you want to remove the selected %1"), displayObjectClass))) {
+		Popup::ShowFeedback(sformat(_("Removing %1 Settings"), displayObjectClass), _("Please wait..."));
+		SleposSystemManager::removeObjectFromLDAP(object_key, true);
+		Popup::ClearFeedback();
+		return `next;
+	}
+	return `abort;
+}
+
+
+/**
+ * General function for modifying a table element
+ * @return boolean true on success
+ */
+boolean HandleModifyTableObject() {
+	string objectClass = SleposSystemManager::getObjectValue("objectClass", SleposSystemManager::temp_ldap_object);
+	Popup::ShowFeedback(sformat(_("Modifying %1 Settings"), SleposSystemManager::ReturnTextForObjectClass(objectClass)), _("Please wait..."));
+	boolean success = SleposSystemManager::modifyObjectToLDAP(SleposSystemManager::temp_ldap_object);
+	Popup::ClearFeedback();
+	return success;
+}
+
+
+/**
+ * General function for adding a table element
+ * @return boolean true on success
+ */
+boolean HandleAddTableObject() {
+	// what is the objectClass of the new LDAP object?
+	string objectClass = SleposSystemManager::getObjectValue("objectClass", SleposSystemManager::temp_ldap_object);
+	string base = Wizard::QueryTreeItem(); // NOTE: this must happen before the Popup::ShowFeedback...otherwise we will not have the tree in the current dialog scope.
+
+	Popup::ShowFeedback(sformat(_("Creating %1 Settings"), SleposSystemManager::ReturnTextForObjectClass(objectClass)), _("Please wait..."));
+	
+	string dn = SleposSystemManager::getObjectValue("DN", SleposSystemManager::temp_ldap_object);
+	if (dn == nil || dn == "") { // new object
+		// Figure out the DN for this object
+		base = regexpsub(base, "(.*)@(.*)", "\\1");
+		if (objectClass == nil || objectClass == "") y2error("A valid objectClass was not specified in the LDAP object");
+		if (objectClass == "scNetworkcard") {// scNetworkcard requires a special case...it does not use attribute cn!
+			string scDevice = SleposSystemManager::getObjectValue("scDevice", SleposSystemManager::temp_ldap_object);
+			dn = sformat("scDevice=%1,%2", scDevice, base);
+		}
+		else {
+			string cn = SleposSystemManager::getObjectValue("cn", SleposSystemManager::temp_ldap_object);
+			dn = sformat("cn=%1,%2", cn, base);
+		}
+		SleposSystemManager::temp_ldap_object = SleposSystemManager::setObjectValues("DN", dn, SleposSystemManager::temp_ldap_object);
+	}
+	// add the new object to LDAP
+	boolean success = SleposSystemManager::modifyObjectToLDAP(SleposSystemManager::temp_ldap_object);
+	Popup::ClearFeedback();
+	return success;
+}
+
+
+
+
+
+
+
+
+/**
+  *******************************************************************
+  * Generic LDAP Object table
+  * (add/modify/remove scService, scHAService, scNetworkCard, scHarddisk, scRamDisk, scConfigFileSyncTemplate, scConfigFileTemplate, etc.)
+  * Dialog Functions
+  *******************************************************************
+*/
+
+/**
+ * Function redraws LDAP objects Table
+ */
+void RedrawObjectTableDialog() {
+	list <term> table_items = [];
+
+	// listing all known children objects (services, hardware, etc.)
+	foreach (list <list <string> > object, SleposSystemManager::known_ldap_objects, {
+		string objectDN = SleposSystemManager::getObjectValue("DN", object);
+		string cn = SleposSystemManager::getObjectValue("cn", object);
+		string objectClass = SleposSystemManager::getObjectValue("objectClass", object);
+		string objectClassText = SleposSystemManager::ReturnTextForObjectClass(objectClass);
+		if (objectClass == "scNetworkcard" || objectClass == "scHarddisk" || objectClass == "scRamDisk") {
+			cn = SleposSystemManager::getObjectValue("scDevice", object); // display scDevice as the cn (name) for scNetworkcard and scRamDisk
+		}
+		table_items = add (table_items, `item( `id(objectDN),
+			cn,
+			objectClassText
+		));
+	});
+
+	UI::ChangeWidget ( `id("table_objects"), `Items, table_items);
+}
+
+
+/**
+ * Initializes LDAP objects table
+ */
+void InitObjectTableDialog(string key) {
+	y2milestone("**********************************************************");
+	y2milestone("InitObjectTableDialog(%1)", key);
+	y2milestone("**********************************************************");
+	InitTableDialog();
+	RedrawObjectTableDialog();
+}
+
+
+/**
+ * Function handles LDAP object settings dialog
+ */
+symbol HandleObjectTableDialog (string key, map event) {
+	any ret = event["ID"]:nil;
+
+	string current_item = (string) UI::QueryWidget(`id ("table_objects"), `CurrentItem);
+
+	y2milestone("HandleObjectTableDialog(%1, %2)", key, event);
+	y2milestone("current_item: %1", current_item);
+	y2milestone("Wizard::QueryTreeItem=%1", Wizard::QueryTreeItem());
+
+	// push buttons below the table (add, modify, remove)
+	if (ret == "add_object") {
+		// figure out what the objectClass is of the base
+		string SelectedTreeItem = Wizard::QueryTreeItem();
+		string objectClass = regexpsub(SelectedTreeItem, "(.*)@(.*)", "\\2");
+
+		// display the approriate SelectObjectType screen depending on what the is the objectClass of the base object.
+		SleposSystemManager::modified = true;
+		list<string> validObjectClasses = [];
+		if (objectClass == "scBranchServer") validObjectClasses = ["scService", "scHAService", "scHarddisk", "scNetworkcard"];
+		else if (objectClass == "scWorkstation" || objectClass == "scCashRegister") validObjectClasses = ["scHarddisk", "scRamDisk", "scConfigFileSyncTemplate", "scConfigFileTemplate"];
+		ret = SelectObjectTypeSequence("", validObjectClasses); // a new_object
+		SleposSystemManager::modified = false;
+		
+		if (ret == `next) {
+			HandleAddTableObject();
+			return `redraw;
+		}
+	}
+	else if (ret == "modify_object") {
+		if (current_item != nil && current_item != "") {
+			SleposSystemManager::temp_ldap_object = []; // clear out any old stuff
+			// figure out what type of object is selected in the table
+			SleposSystemManager::temp_ldap_object = SleposSystemManager::getObjectFromList(current_item, SleposSystemManager::known_ldap_objects); // grab the location object from the list of LDAP objects	
+			string objectClass = SleposSystemManager::getObjectValue("objectClass", SleposSystemManager::temp_ldap_object);
+			if (objectClass == nil || objectClass == "") {
+				y2error("A valid objectClass was not specified in the LDAP object");
+				return nil;
+			}
+			SleposSystemManager::modified = true;
+			ret = SelectObjectTypeSequence(current_item, [ objectClass ]); // NOTE: Paramater to SelectObjectTypeSequence requires that objectClass be placed into a list!
+			SleposSystemManager::modified = false;
+			if (ret == `next) {
+				HandleModifyTableObject();
+				return `redraw;
+			}
+		}
+	}
+	else if (ret == "remove_object") {
+		if (current_item != nil && current_item != "") {
+			ret = HandlePopupRemoveTableObject(current_item);
+			if (ret == `next) return `redraw;
+		}
+	}
+	else if (ret == `next || ret == `finish || ret == `back || ret == `abort)
+		return (symbol) ret;
+	else if ( contains(Map::Keys(SleposSystemManager::SettingsMap["screens"]:$[]), ret) ) { // check if the return value is a valid dialog screen in the list of dialog screens (dialogs.ycp)
+		SleposSystemManager::SettingsMap["current_screen"] = ret;
+		return `redraw;
+	}
+	else if ( ret == `wizardTree && contains(Map::Keys(SleposSystemManager::SettingsMap["screens"]:$[]), Wizard::QueryTreeItem()) ) { // NOTE: this in not a reduent test case.  The DialogTree is handled differently when using Ncurses
+		SleposSystemManager::SettingsMap["current_screen"] = Wizard::QueryTreeItem();
+		return `redraw;
+	}
+	else y2error("Unknown return value: %1", ret); 
+
+	RedrawObjectTableDialog();
+
+	return nil;
+}
+
+
+
+
+
+
+/**
+  *******************************************************************
+  * Branch Locations (add/remove/modify scLocation objects) Dialog Functions
+  *******************************************************************
+*/
+
+/**
+ * Function redraws Branch Locations (scLocations) Table
+ */
+void RedrawscLocationTableDialog() {
+	list <term> table_items = [];
+
+	// listing all known branch locations
+	foreach (list <list <string> > ldap_object, SleposSystemManager::known_ldap_objects, {
+		string dn = SleposSystemManager::getObjectValue("DN", ldap_object);
+		table_items = add (table_items, `item( `id(dn),
+			SleposSystemManager::getObjectValue("cn", ldap_object),
+			SleposSystemManager::GetDomainName(dn),
+			SleposSystemManager::getObjectValue("ipNetworkNumber", ldap_object),
+			SleposSystemManager::getObjectValue("ipNetmaskNumber", ldap_object)
+		));
+	});
+
+	UI::ChangeWidget ( `id("table_scLocation"), `Items, table_items);
+}
+
+
+/**
+ * Initializes Locations table
+ */
+void InitscLocationTableDialog(string key) {
+	y2milestone("**********************************************************");
+	y2milestone("InitscLocationDialog(%1)", key);
+	y2milestone("**********************************************************");
+	InitTableDialog();
+	RedrawscLocationTableDialog();
+}
+
+
+/**
+ * Function handles whole branch locations dialog
+ */
+symbol HandlescLocationTableDialog (string key, map event) {
+	any ret = event["ID"]:nil;
+
+	string current_item = (string) UI::QueryWidget(`id ("table_scLocation"), `CurrentItem);
+
+	y2milestone("HandlescLocationTableDialog(%1, %2)", key, event);
+	y2milestone("current_item: %1", current_item);
+	y2milestone("Wizard::QueryTreeItem=%1", Wizard::QueryTreeItem());
+
+
+	// push buttons below the table (add, modify, remove)
+	if (ret == "add_scLocation") {
+		SleposSystemManager::modified = true;
+		SleposSystemManager::temp_ldap_object = [["objectClass", "scLocation"]]; // clear out any old stuff
+		ret = scLocationSequence(""); // adding a new item
+		SleposSystemManager::modified = false;
+		if (ret == `next) {
+			if (!SleposSystemManager::add_scLocation(SleposSystemManager::temp_ldap_object)) Popup::Error(_("An error occured adding the branch location."));
+			Popup::ClearFeedback();
+			return `redraw;
+		}
+	}
+	else if (ret == "modify_scLocation") {
+		if (current_item != nil && current_item != "") {
+			SleposSystemManager::modified = true;
+			SleposSystemManager::temp_ldap_object = []; // clear out any old stuff
+			ret = scLocationSequence(current_item); // modifying a current item
+		}
+		SleposSystemManager::modified = false;
+		if (ret == `next) {
+			HandleModifyTableObject();
+			return `redraw;
+		}
+	}
+	else if (ret == "remove_scLocation") {
+		if (current_item != nil && current_item != "") {
+			ret = HandlePopupRemoveTableObject(current_item);
+			if (ret == `next) return `redraw;
+		}
+	}
+	else if (ret == `next || ret == `finish || ret == `back || ret == `abort)
+		return (symbol) ret;
+	else if ( contains(Map::Keys(SleposSystemManager::SettingsMap["screens"]:$[]), ret) ) { // check if the return value is a valid dialog screen in the list of dialog screens (dialogs.ycp)
+		SleposSystemManager::SettingsMap["current_screen"] = ret;
+		return `redraw;
+	}
+	else if ( ret == `wizardTree && contains(Map::Keys(SleposSystemManager::SettingsMap["screens"]:$[]), Wizard::QueryTreeItem()) ) { // NOTE: this in not a reduent test case.  The DialogTree is handled differently when using Ncurses
+		SleposSystemManager::SettingsMap["current_screen"] = Wizard::QueryTreeItem();
+		return `redraw;
+	}
+	else y2error("Unknown return value: %1", ret);
+
+	RedrawscLocationTableDialog();
+
+	return nil;
+}
+
+
+
+
+
+/**
+  *******************************************************************
+  * add/remove/modify
+  * scBranchServer,scServerContainer,and scWorkstaion objects
+  * Dialog Functions
+  *******************************************************************
+*/
+
+/**
+ * Function redraws BranchServer/Workstation Dialog (Branch servers table and workstations table)
+ */
+void Redraw_scBranchServer_scWorkstation_TableDialog() {
+	list <term> table_items = [];
+
+	// listing all known branch servers
+	foreach (list <list <string> > object, SleposSystemManager::known_ldap_objects, {
+		if (SleposSystemManager::getObjectValue("objectClass", object) == "scBranchServer") {
+			string objectDN = SleposSystemManager::getObjectValue("DN", object);
+			table_items = add (table_items, `item( `id(objectDN),
+				SleposSystemManager::getObjectValue("cn", object),
+				SleposSystemManager::GetDomainName(objectDN)
+			));
+		}
+	});
+	UI::ChangeWidget ( `id("table_scBranchServer"), `Items, table_items);
+
+	table_items = [];
+	// listing all known workstations
+	foreach (list <list <string> > object, SleposSystemManager::known_ldap_objects, {
+		if (SleposSystemManager::getObjectValue("objectClass", object) == "scWorkstation") {
+			string objectDN = SleposSystemManager::getObjectValue("DN", object);
+			table_items = add (table_items, `item( `id(objectDN),
+				SleposSystemManager::getObjectValue("cn", object),
+				SleposSystemManager::GetDomainName(objectDN),
+				SleposSystemManager::getObjectValue("macAddress", object),
+				SleposSystemManager::getObjectValue("ipHostNumber", object)
+			));
+		}
+	});
+	UI::ChangeWidget ( `id("table_scWorkstation"), `Items, table_items);
+}
+
+
+/**
+ * Initializes scBranchServer and scWorkstation Dialog (Branch servers table and Workstations table)
+ */
+void Init_scBranchServer_scWorkstation_TableDialog(string key) {
+	y2milestone("**********************************************************");
+	y2milestone("Init_scBranchServer_scWorkstation_Dialog(%1)", key);
+	y2milestone("**********************************************************");
+	InitTableDialog();
+	Redraw_scBranchServer_scWorkstation_TableDialog();
+}
+
+
+/**
+ * Function handles Branch Server / Workstation dialog settings
+ */
+symbol Handle_scBranchServer_scWorkstation_TableDialog (string key, map event) {
+	any ret = event["ID"]:nil;
+	
+	y2milestone("Handle_scBranchServer_scWorkstation_Dialog(%1, %2)", key, event);
+	y2milestone("Wizard::QueryTreeItem=%1", Wizard::QueryTreeItem());
+
+	// push buttons below the table (add, modify, remove)
+	if (ret == "add_scBranchServer") {
+		SleposSystemManager::modified = true;
+		SleposSystemManager::temp_ldap_object = [["objectClass", "scBranchServer"]]; // clear out any old stuff
+		ret = scBranchServerSequence(""); // adding a new item
+		SleposSystemManager::modified = false;
+		if (ret == `next) {
+			// figure out the LDAP base where this object will reside
+			string base = Wizard::QueryTreeItem();
+			base = regexpsub(base, "(.*)@(.*)", "\\1");
+			if (!SleposSystemManager::add_scBranchServer(SleposSystemManager::temp_ldap_object, base)) Popup::Error(_("An error occured adding the branch server."));
+			Popup::ClearFeedback();
+			return `redraw;
+		}
+	}
+	else if (ret == "modify_scBranchServer") {
+		string current_item = (string) UI::QueryWidget(`id ("table_scBranchServer"), `CurrentItem);
+		if (current_item != nil && current_item != "") {
+			SleposSystemManager::modified = true;
+			SleposSystemManager::temp_ldap_object = []; // clear out any old stuff
+			ret = scBranchServerSequence(current_item); // modifying a current item
+		}
+		SleposSystemManager::modified = false;
+		if (ret == `next) {
+			// figure out the LDAP base where this object will reside
+			string base = Wizard::QueryTreeItem();
+			base = regexpsub(base, "(.*)@(.*)", "\\1");
+			if (!SleposSystemManager::add_scBranchServer(SleposSystemManager::temp_ldap_object, base)) Popup::Error(_("An error occured modifying the branch server."));
+			Popup::ClearFeedback();
+			return `redraw;
+		}
+	}
+	else if (ret == "remove_scBranchServer") {
+		string current_item = (string) UI::QueryWidget(`id ("table_scBranchServer"), `CurrentItem);
+		if (current_item != nil && current_item != "") {
+			ret = HandlePopupRemoveTableObject(current_item);
+			if (ret == `next) return `redraw;
+		}
+	}
+	else if (ret == "add_scWorkstation") {
+		SleposSystemManager::modified = true;
+		SleposSystemManager::temp_ldap_object = [["objectClass", "scWorkstation"]]; // clear out any old stuff
+		ret = scWorkstationSequence(""); // adding a new item
+		SleposSystemManager::modified = false;
+		if (ret == `next) {
+			HandleAddTableObject();
+			return `redraw;
+		}
+	}
+	else if (ret == "modify_scWorkstation") {
+		string current_item = (string) UI::QueryWidget(`id ("table_scWorkstation"), `CurrentItem);
+		if (current_item != nil && current_item != "") {
+			SleposSystemManager::modified = true;
+			SleposSystemManager::temp_ldap_object = []; // clear out any old stuff
+			ret = scWorkstationSequence(current_item); // modifying a current item
+		}
+		SleposSystemManager::modified = false;
+		if (ret == `next) {
+			HandleModifyTableObject();
+			return `redraw;
+		}
+	}
+	else if (ret == "remove_scWorkstation") {
+		string current_item = (string) UI::QueryWidget(`id ("table_scWorkstation"), `CurrentItem);
+		if (current_item != nil && current_item != "")
+			ret = HandlePopupRemoveTableObject(current_item);
+		if (ret == `next) return `redraw;
+	}
+	else if (ret == `next || ret == `finish || ret == `back || ret == `abort)
+		return (symbol) ret;
+	else if ( contains(Map::Keys(SleposSystemManager::SettingsMap["screens"]:$[]), ret) ) { // check if the return value is a valid dialog screen in the list of dialog screens (dialogs.ycp)
+		SleposSystemManager::SettingsMap["current_screen"] = ret;
+		return `redraw;
+	}
+	else if ( ret == `wizardTree && contains(Map::Keys(SleposSystemManager::SettingsMap["screens"]:$[]), Wizard::QueryTreeItem()) ) { // NOTE: this in not a reduent test case.  The DialogTree is handled differently when using Ncurses
+		SleposSystemManager::SettingsMap["current_screen"] = Wizard::QueryTreeItem();
+		return `redraw;
+	}
+	else y2error("Unknown return value: %1", ret); 
+
+	Redraw_scBranchServer_scWorkstation_TableDialog();
+
+	return nil;
+}
+
+
+
+
+/**
+  *******************************************************************
+  * Reference Object Conainter object
+  * (add/remove/modify scRefObjectContainer)
+  * Dialog Functions
+  *******************************************************************
+*/
+
+/**
+ * Function redraws ref. object container Table
+ */
+void RedrawscRefObjectContainerTableDialog() {
+	list <term> table_items = [];
+
+	// listing all known ref. object container objects
+	foreach (list <list <string> > object, SleposSystemManager::known_ldap_objects, {
+		if (SleposSystemManager::getObjectValue("objectClass", object) == "scRefObjectContainer") {
+			string objectDN = SleposSystemManager::getObjectValue("DN", object);
+			table_items = add (table_items, `item( `id(objectDN),
+				SleposSystemManager::getObjectValue("cn", object)
+			));
+		}
+	});
+	UI::ChangeWidget ( `id("table_scRefObjectContainer"), `Items, table_items);
+}
+
+
+/**
+ * Initializes ref. object container table
+ */
+void InitscRefObjectContainerTableDialog(string key) {
+	y2milestone("**********************************************************");
+	y2milestone("InitscRefObjectContainerDialog(%1)", key);
+	y2milestone("**********************************************************");
+	InitTableDialog();
+	RedrawscRefObjectContainerTableDialog();
+}
+
+
+symbol HandlescRefObjectContainerTableDialog(string key, map event) {
+
+	any ret = event["ID"]:nil;
+
+	string current_item = (string) UI::QueryWidget(`id ("table_scRefObjectContainer"), `CurrentItem);
+
+	y2milestone("HandlescRefObjectContainerTableDialog(%1, %2)", key, event);
+	y2milestone("current_item: %1", current_item);
+	y2milestone("Wizard::QueryTreeItem=%1", Wizard::QueryTreeItem());
+
+	// push buttons below the table (add, modify, remove)
+	if (ret == "add_scRefObjectContainer") {
+		SleposSystemManager::modified = true;
+		SleposSystemManager::temp_ldap_object = [["objectClass", "scRefObjectContainer"]]; // clear out any old stuff
+		ret = scRefObjectContainerSequence(""); // adding a new item
+		SleposSystemManager::modified = false;
+		if (ret == `next) {
+			HandleAddTableObject();
+			return `redraw;
+		}
+	}
+	else if (ret == "modify_scRefObjectContainer") {
+		if (current_item != nil && current_item != "") {
+			SleposSystemManager::modified = true;
+			SleposSystemManager::temp_ldap_object = []; // clear out any old stuff
+			ret = scRefObjectContainerSequence(current_item); // modifying a current item
+		}
+		SleposSystemManager::modified = false;
+		if (ret == `next) {
+			HandleModifyTableObject();
+			return `redraw;
+		}
+	}
+	else if (ret == "remove_scRefObjectContainer") {
+		if (current_item != nil && current_item != "") {
+			ret = HandlePopupRemoveTableObject(current_item);
+			if (ret == `next) return `redraw;
+		}
+	}
+	else if (ret == `next || ret == `finish || ret == `back || ret == `abort) 
+		return (symbol) ret;
+	else if ( contains(Map::Keys(SleposSystemManager::SettingsMap["screens"]:$[]), ret) ) { // check if the return value is a valid dialog screen in the list of dialog screens (dialogs.ycp)
+		SleposSystemManager::SettingsMap["current_screen"] = ret;
+		return `redraw;
+	}
+	else if ( ret == `wizardTree && contains(Map::Keys(SleposSystemManager::SettingsMap["screens"]:$[]), Wizard::QueryTreeItem()) ) { // NOTE: this in not a reduent test case.  The DialogTree is handled differently when using Ncurses
+		SleposSystemManager::SettingsMap["current_screen"] = Wizard::QueryTreeItem();
+		return `redraw;
+	}
+	else y2error("Unknown return value: %1", ret); 
+
+	RedrawscRefObjectContainerTableDialog();
+
+	return nil;
+}
+
+
+
+
+
+/**
+  *******************************************************************
+  * Distribution Conainter object and Hardware Reference Object
+  * (add/remove/modify scDistributionContainer and scCashRegister)
+  * Dialog Functions
+  *******************************************************************
+*/
+
+/**
+ * Function redraws distribution container Table
+ */
+void Redraw_scDistributionContainer_scCashRegister_TableDialog() {
+	list <term> table_items = [];
+	// listing all known distribution container objects
+	foreach (list <list <string> > object, SleposSystemManager::known_ldap_objects, {
+		if (SleposSystemManager::getObjectValue("objectClass", object) == "scDistributionContainer") {
+			string objectDN = SleposSystemManager::getObjectValue("DN", object);
+			table_items = add (table_items, `item( `id(objectDN),
+				SleposSystemManager::getObjectValue("cn", object),
+				SleposSystemManager::getObjectValue("scKernelVersion", object),
+				SleposSystemManager::getObjectValue("scKernelName", object),
+				SleposSystemManager::getObjectValue("scInitrdName", object),
+				SleposSystemManager::getObjectValue("scKernelMatch", object)
+			));
+		}
+	});
+	UI::ChangeWidget ( `id("table_scDistributionContainer"), `Items, table_items);
+
+	table_items = [];
+	// listing all known hardware reference objects
+	foreach (list <list <string> > object, SleposSystemManager::known_ldap_objects, {
+		if (SleposSystemManager::getObjectValue("objectClass", object) == "scCashRegister") {
+			string objectDN = SleposSystemManager::getObjectValue("DN", object);
+			list <list <list <string> > > image_objects = SleposSystemManager::GetObjectsFromLDAP("scPosImage", nil, true);
+			list <list <string> > image_object = SleposSystemManager::getObjectFromList(SleposSystemManager::getObjectValue("scPosImageDn", object), image_objects);
+			table_items = add (table_items, `item( `id(objectDN),
+				SleposSystemManager::getObjectValue("cn", object),
+				SleposSystemManager::getObjectValue("scCashRegisterName", object),
+				SleposSystemManager::getObjectValue("scImageName", image_object),
+				SleposSystemManager::getObjectValue("scDiskJournal", object)
+			));
+		}
+	});
+	UI::ChangeWidget ( `id("table_scCashRegister"), `Items, table_items);
+}
+
+
+/**
+ * Initializes distribution container table
+ */
+void Init_scDistributionContainer_scCashRegister_TableDialog(string key) {
+	y2milestone("**********************************************************");
+	y2milestone("Init_scDistributionContainer_scCashRegister_TableDialog(%1)", key);
+	y2milestone("**********************************************************");
+	InitTableDialog();
+	Redraw_scDistributionContainer_scCashRegister_TableDialog();
+}
+
+
+symbol Handle_scDistributionContainer_scCashRegister_TableDialog(string key, map event) {
+
+	any ret = event["ID"]:nil;
+
+	y2milestone("Handle_scDistributionContainer_scCashRegister_TableDialog(%1, %2)", key, event);
+	y2milestone("Wizard::QueryTreeItem=%1", Wizard::QueryTreeItem());
+
+	// push buttons below the table (add, modify, remove)
+	if (ret == "add_scDistributionContainer") {
+		SleposSystemManager::modified = true;
+		SleposSystemManager::temp_ldap_object = [["objectClass", "scDistributionContainer"]]; // clear out any old stuff
+		ret = scDistributionContainerSequence(""); // adding a new item
+		SleposSystemManager::modified = false;
+		if (ret == `next) {
+			HandleAddTableObject();
+			return `redraw;
+		}
+	}
+	else if (ret == "modify_scDistributionContainer") {
+		string current_item = (string) UI::QueryWidget(`id ("table_scDistributionContainer"), `CurrentItem);
+		if (current_item != nil && current_item != "") {
+			SleposSystemManager::modified = true;
+			SleposSystemManager::temp_ldap_object = []; // clear out any old stuff
+			ret = scDistributionContainerSequence(current_item); // modifying a current item
+		}
+		SleposSystemManager::modified = false;
+		if (ret == `next) {
+			HandleModifyTableObject();
+			return `redraw;
+		}
+	}
+	else if (ret == "remove_scDistributionContainer") {
+		string current_item = (string) UI::QueryWidget(`id ("table_scDistributionContainer"), `CurrentItem);
+		if (current_item != nil && current_item != "") {
+			ret = HandlePopupRemoveTableObject(current_item);
+			if (ret == `next) return `redraw;
+		}
+	}
+	else if (ret == "add_scCashRegister") {
+		SleposSystemManager::modified = true;
+		SleposSystemManager::temp_ldap_object = [["objectClass", "scCashRegister"]]; // clear out any old stuff
+		ret = scCashRegisterSequence(""); // adding a new item
+		SleposSystemManager::modified = false;
+		if (ret == `next) {
+			HandleAddTableObject();
+			return `redraw;
+		}
+	}
+	else if (ret == "modify_scCashRegister") {
+		string current_item = (string) UI::QueryWidget(`id ("table_scCashRegister"), `CurrentItem);
+		if (current_item != nil && current_item != "") {
+			SleposSystemManager::modified = true;
+			SleposSystemManager::temp_ldap_object = []; // clear out any old stuff
+			ret = scCashRegisterSequence(current_item); // modifying a current item
+		}
+		SleposSystemManager::modified = false;
+		if (ret == `next) {
+			HandleModifyTableObject();
+			return `redraw;
+		}
+	}
+	else if (ret == "remove_scCashRegister") {
+		string current_item = (string) UI::QueryWidget(`id ("table_scCashRegister"), `CurrentItem);
+		if (current_item != nil && current_item != "") {
+			ret = HandlePopupRemoveTableObject(current_item);
+			if (ret == `next) return `redraw;
+		}
+	}
+	else if (ret == `next || ret == `finish || ret == `back || ret == `abort)
+		return (symbol) ret;
+	else if ( contains(Map::Keys(SleposSystemManager::SettingsMap["screens"]:$[]), ret) ) { // check if the return value is a valid dialog screen in the list of dialog screens (dialogs.ycp)
+		SleposSystemManager::SettingsMap["current_screen"] = ret;
+		return `redraw;
+	}
+	else if ( ret == `wizardTree && contains(Map::Keys(SleposSystemManager::SettingsMap["screens"]:$[]), Wizard::QueryTreeItem()) ) { // NOTE: this in not a reduent test case.  The DialogTree is handled differently when using Ncurses
+		SleposSystemManager::SettingsMap["current_screen"] = Wizard::QueryTreeItem();
+		return `redraw;
+	}
+	else y2error("Unknown return value: %1", ret);
+
+	Redraw_scDistributionContainer_scCashRegister_TableDialog();
+
+	return nil;
+}
+
+
+
+
+
+
+
+
+
+
+/**
+  *******************************************************************
+  * Image reference object (add/remove/modify scPosImage) Dialog Functions 
+  *******************************************************************
+*/
+
+/**
+ * Function redraws Images Table
+ */
+void RedrawscPosImageTableDialog() {
+	list <term> table_items = [];
+
+	// listing all known image reference objects
+	foreach (list <list <string> > object, SleposSystemManager::known_ldap_objects, {
+		if (SleposSystemManager::getObjectValue("objectClass", object) == "scPosImage") {
+			string objectDN = SleposSystemManager::getObjectValue("DN", object);
+			table_items = add (table_items, `item( `id(objectDN),
+				SleposSystemManager::getObjectValue("scImageName", object),
+				SleposSystemManager::getObjectValue("scPosImageVersion", object),
+				SleposSystemManager::getObjectValue("scImageFile", object),
+				SleposSystemManager::getObjectValue("scBsize", object),
+				SleposSystemManager::getObjectValue("scDhcpOptionsRemote", object),
+				SleposSystemManager::getObjectValue("scDhcpOptionsLocal", object),
+				SleposSystemManager::getObjectValue("scConfigFile", object)
+			));
+		}
+	});
+	UI::ChangeWidget ( `id("table_scPosImage"), `Items, table_items);
+}
+
+
+/**
+ * Initializes Images table
+ */
+void InitscPosImageTableDialog(string key) {
+	y2milestone("**********************************************************");
+	y2milestone("InitscPosImageDialog(%1)", key);
+	y2milestone("**********************************************************");
+	InitTableDialog();
+	RedrawscPosImageTableDialog();
+}
+
+
+symbol HandlescPosImageTableDialog(string key, map event) {
+
+	any ret = event["ID"]:nil;
+
+	string current_item = (string) UI::QueryWidget(`id ("table_scPosImage"), `CurrentItem);
+
+	y2milestone("HandlescPosImageTableDialog(%1, %2)", key, event);
+	y2milestone("current_item: %1", current_item);
+	y2milestone("Wizard::QueryTreeItem=%1", Wizard::QueryTreeItem());
+
+	// push buttons below the table (add, modify, remove)
+	if (ret == "add_scPosImage") {
+		SleposSystemManager::modified = true;
+		SleposSystemManager::temp_ldap_object = [["objectClass", "scPosImage"]]; // clear out any old stuff
+		ret = scPosImageSequence(""); // adding a new item
+		SleposSystemManager::modified = false;
+		if (ret == `next) {
+			HandleAddTableObject();
+			return `redraw;
+		}
+	}
+	else if (ret == "modify_scPosImage") {
+		if (current_item != nil && current_item != "") {
+			SleposSystemManager::modified = true;
+			SleposSystemManager::temp_ldap_object = []; // clear out any old stuff
+			ret = scPosImageSequence(current_item); // modifying a current item
+		}
+		SleposSystemManager::modified = false;
+		if (ret == `next) {
+			HandleModifyTableObject();
+			return `redraw;
+		}
+	}
+	else if (ret == "remove_scPosImage") {
+		if (current_item != nil && current_item != "") {
+			ret = HandlePopupRemoveTableObject(current_item);
+			if (ret == `next) return `redraw;
+		}
+	}
+	else if (ret == `next || ret == `finish || ret == `back || ret == `abort) 
+		return (symbol) ret;
+	else if ( contains(Map::Keys(SleposSystemManager::SettingsMap["screens"]:$[]), ret) ) { // check if the return value is a valid dialog screen in the list of dialog screens (dialogs.ycp)
+		SleposSystemManager::SettingsMap["current_screen"] = ret;
+		return `redraw;
+	}
+	else if ( ret == `wizardTree && contains(Map::Keys(SleposSystemManager::SettingsMap["screens"]:$[]), Wizard::QueryTreeItem()) ) { // NOTE: this in not a reduent test case.  The DialogTree is handled differently when using Ncurses
+		SleposSystemManager::SettingsMap["current_screen"] = Wizard::QueryTreeItem();
+		return `redraw;
+	}
+	else y2error("Unknown return value: %1", ret); 
+
+	RedrawscPosImageTableDialog();
+
+	return nil;
+}
+
+
+
+
+/* EOF */
+}

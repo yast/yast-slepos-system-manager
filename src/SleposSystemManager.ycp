@@ -1,0 +1,957 @@
+/**
+ * File:	modules/SleposSystemManager.ycp
+ * Package:	Configuration of slepos-system-manager
+ * Summary:	SleposSystemManager settings, input and output functions
+ * Authors:	Michael G. Fritch <mgfritch@novell.com>
+ *
+ * $Id: SleposSystemManager.ycp,v 1.13 2004/03/15 13:18:08 mvidner Exp $
+ *
+ * Representation of the configuration of slepos-system-manager.
+ * Input and output routines.
+ */
+
+{
+
+module "SleposSystemManager";
+textdomain "slepos-system-manager";
+
+import "Progress";
+import "Report";
+import "Popup";
+import "Summary";
+import "SleposUtils";
+import "Mode";
+
+global map SettingsMap = $[]; // Global settings
+global list <list <list <string> > > known_ldap_objects = []; // List of LDAP object attribuites for the currently selected tab in the UI (i.e. branch server, workstation, etc.)
+global list <list <string> > temp_ldap_object = []; // used for storing an ldap object when it is being modified.
+
+/**
+ * Prototypes
+ */
+global boolean Modified();
+
+/**
+ * Data was modified?
+ */
+global boolean modified = false;
+
+/**
+ */
+global boolean proposal_valid = false;
+
+/**
+ * Write only, used during autoinstallation.
+ * Don't run services and SuSEconfig, it's all done at one place.
+ */
+global boolean write_only = false;
+
+/**
+ * Abort function
+ * return boolean return true if abort
+ */
+global boolean() AbortFunction = Modified;
+
+/**
+ * Abort function
+ * @return boolean return true if abort
+ */
+global define boolean Abort() ``{
+    if(AbortFunction != nil)
+    {
+	return AbortFunction () == true;
+    }
+    return false;
+}
+
+/**
+ * Data was modified?
+ * @return true if modified
+ */
+global boolean Modified() {
+    y2debug("modified=%1",modified);
+    return modified;
+}
+
+
+/**
+ * Returns the correct term to display to the user given a specific objectClass
+ * For example: scNetworkcard -> 'Network Card'
+ * @param string objectClass
+ * @param string user readable object class string
+ */
+global string ReturnTextForObjectClass(string objectClass) {
+	if (objectClass == "scBranchServer") return _("Branch Server");
+	else if (objectClass == "scWorkstation") return _("Workstation");
+	else if (objectClass == "scHarddisk") return _("Hard Disk");
+	else if (objectClass == "scRamDisk") return _("RAM disk");
+	else if (objectClass == "scNetworkcard") return _("Network Card");
+	else if (objectClass == "scService") return _("Network Service");
+	else if (objectClass == "scHAService") return _("High Availability Service");
+	else if (objectClass == "scCashRegister") return _("Hardware Reference Object");
+	else if (objectClass == "scPosImage") return _("Image Reference Object");
+	else if (objectClass == "scConfigFileSyncTemplate") return _("File-Based Configuration Template");
+	else if (objectClass == "scConfigFileTemplate") return _("LDAP-Based Configuration Template");
+	else if (objectClass == "organizationalUnit") return _("Organizational Unit");
+	else if (objectClass == "scLocation") return _("Branch Location");
+	else if (objectClass == "scHardware") return _("Locator Object");
+	else if (objectClass == "scRefObjectContainer") return _("Global Container");
+	else if (objectClass == "scDistributionContainer") return _("Distribution Container");
+	else return _("Object");
+}
+
+
+/**
+ * Returns the domain name (DNS location) of a scLocation LDAP DN
+ * Example: cn=branch,ou=provo,o=a31,c=us  --> branch.provo.a31.us
+ * @param string server DN
+ * @return string domain name
+ */
+global define string GetDomainName(string dn) {
+	y2debug("dn: %1", dn);
+	if (dn == nil || dn == "") return "";
+
+	// tokenize the dn using the ',' char
+	list<string> tmplist = splitstring(dn, ",");
+
+	// remove all 'cn=', 'ou=', etc.
+	list<string> newlist = [];
+	foreach(string tmpstr, tmplist, {
+		tmpstr = regexpsub(tmpstr, ".*=(.*)", "\\1");
+		newlist = add(newlist, tmpstr);
+	});
+
+	// remove the first 2 elements from the list
+	//newlist = remove(newlist, 0);
+	//newlist = remove(newlist, 0);
+
+	// add a '.' char between each token
+	string loc =  mergestring(newlist, ".");
+	y2milestone("location: %1", loc);
+	return loc;
+}
+
+
+/**
+ * Removes the values for a key in a list of object values.
+ * @param string key, list <list <string> > object
+ * @return list <list <string> > value
+ */
+global list <list <string> > removeObjectValues(string key, list <list <string> > ldap_object) {
+	y2milestone("removeObjectValues(%1, %2)", key, ldap_object);
+
+	if (key == nil || key == "") {
+		y2milestone("removeObjectValues returned: %1", ldap_object);
+		return ldap_object;
+	}
+
+	ldap_object = filter(list <string> valuePair, ldap_object, { return (valuePair[0]:"" != key); });
+	
+	y2milestone("removeObjectValues returned: %1", ldap_object);
+	return ldap_object;
+}
+
+
+/**
+ * Sets the values for a key in a list of object values.
+ * @param string key, list <list <string> > object
+ * @return list <list <string> > modified object values list
+ */
+global list <list <string> > setObjectValues(string key, string value, list <list <string> > ldap_object) {
+	y2milestone("setObjectValue(%1, %2, %3)", key, value, ldap_object);
+	ldap_object = removeObjectValues(key, ldap_object);
+	ldap_object = add(ldap_object, [key, value]);
+	y2milestone("setObjectValues returned: %1", ldap_object);
+	return ldap_object;
+}
+
+/**
+ * Returns the values for a key in a list of object values.
+ * @param string key, list <list <string> > object
+ * @return list<string> object values
+ */
+global list<string> getObjectValues(string key, list <list <string> > ldap_object) {
+	list<string> retval = [];
+	if (key == nil || key == "") return retval;
+	foreach(list <string> valuePair, ldap_object, {
+		if (valuePair[0]:"" == key)
+			retval = add(retval, (string)valuePair[1]:"");
+	});
+	if (key == "objectClass") retval = filter (string class, retval, { return (tolower(class) != "top"); }); // remove 'top' from the list if the key is objectClass
+	return retval;
+}
+
+/**
+ * Returns the FIRST value for a key in the a list of object values.
+ * NOTE: Use getObjectValues to return a list<string> of all the values for a given key!
+ * @param string key(DN), list <list <string> > ldap_object
+ * @return string first value in list of values
+ */
+global string getObjectValue(string key, list <list <string> > ldap_object) {
+	list<string> retval = getObjectValues(key, ldap_object);
+	return retval[0]:"";
+}
+
+
+/**
+ * Returns a list containing all of the attributes(key/value) for a specific LDAP object in a list of LDAP objects
+ * @param string object key (DN), list <list <list <string> > >
+ * @return list <list <string> >
+ */
+global list <list <string> > getObjectFromList(string object_key, list <list <list <string> > > objectList) {
+	list <list <string> > retval = [];
+	if (object_key == nil || object_key == "") return retval;
+	foreach(list <list <string> > object, objectList, {
+		string objectValue = getObjectValue("DN", object);
+		if (objectValue == object_key) {
+			retval = object;
+			return;
+		}
+	});
+	return retval;
+}
+
+
+/**
+ * Removes an object from LDAP using posAdmin.pl
+ * @param string object_key (DN), boolean recursive remove objects
+ * @return boolean true on success
+ */
+global boolean removeObjectFromLDAP(string dn, boolean recursive) {
+	string cmd = sformat("/usr/sbin/posAdmin.pl --password '%1' --user '%2' --remove --DN '%3'", SettingsMap["POS_ADMIN_PASSWORD"]:"", SettingsMap["POS_ADMIN_DN"]:"", dn);
+	if (recursive) cmd = cmd + " --recursive";
+	string display_cmd = regexpsub(cmd, "(.*)--password.*(--user.*)", "\\1--password '********' \\2"); // NOTE: we should never display the password in the y2log or to the screen!
+	
+	y2milestone("Executing: %1", display_cmd);
+	map retmap = (map) SCR::Execute(.target.bash_output, cmd);
+	if (retmap["exit"]:-1 != 0) {
+		Popup::ClearFeedback();
+		SleposSystemManager::temp_ldap_object = SleposSystemManager::getObjectFromList(dn, known_ldap_objects); // grab the object from the list of LDAP objects	
+		string objectClass = getObjectValue("objectClass", temp_ldap_object);
+		SleposUtils::errorLogging(sformat(_("Failed to remove the selected %1"), ReturnTextForObjectClass(objectClass)), retmap, display_cmd);
+		return false;
+	}
+	return true;
+}
+
+
+
+
+
+// FIXME: The below method is for debugging only! Must be removed!
+global list <list <list <string> > > debugLDAP(string objectClass, string searchBase) {
+	y2milestone("debugLDAP(%1, %2)", objectClass, searchBase);
+
+	list <list <list <string> > > retval = [];
+	
+	if (objectClass == "scLocation") {
+		retval = add(retval, [
+			["cn"    , "provo"],
+			["DN"    , "cn=provo,ou=ut,o=novell,c=us"],
+			["objectClass"   , "scLocation"],
+			["objectClass", "top"],
+			["scEnumerationMask", "000"],
+			["scDhcpRange", "10.0.0.2,10.0.0.10"],
+			["scDefaultGw", "10.0.0.1"],
+			["ipNetmaskNumber", "255.255.255.0"],
+			["scDynamicIp", "TRUE"],
+			["ipNetworkNumber", "10.0.0.0"],
+			["scDhcpFixedRange", "10.0.0.2,10.0.0.10"],
+			["scWorkstationBaseName", "CR"],
+			["objectClass", "top"],
+			["objectClass", objectClass]
+		]);
+		retval = add(retval, [
+			["cn"    , "boston"],
+			["DN"    , "cn=boston,ou=ma,o=novell,c=us"],
+			["objectClass"   , "scLocation"],
+			["objectClass", "top"],
+			["scEnumerationMask", "000"],
+			["scDhcpRange", "10.0.0.2,10.0.0.10"],
+			["scDefaultGw", "10.0.0.1"],
+			["ipNetmaskNumber", "255.255.255.0"],
+			["scDynamicIp", "TRUE"],
+			["ipNetworkNumber", "10.0.0.0"],
+			["scDhcpFixedRange", "10.0.0.2,10.0.0.10"],
+			["scWorkstationBaseName", "CR"],
+			["objectClass", "top"],
+			["objectClass", objectClass]
+		]);
+	}
+	else if (objectClass == "scBranchServer") {
+		if (issubstring(searchBase, "provo")) {
+			retval = add(retval, [
+				["cn"    , "provo_bs1"],
+				["DN"    , "cn=provo_bs1,cn=server,cn=provo,ou=ut,o=novell,c=us"],
+				["objectClass"   , "scBranchServer"],
+				["scRefServerDn" , "scXXX"],
+				["scPubKey"      , "4lad6df98ad"],
+				["objectClass", "top"],
+				["objectClass", objectClass]
+			]);
+			retval = add(retval, [
+				["cn" , "provo_bs2"],
+				["DN" , "cn=provo_bs2,cn=server,cn=provo,ou=ut,o=novell,c=us"],
+				["objectClass"   , "scBranchServer"],
+				["objectClass", "top"],
+				["objectClass", objectClass]
+			]);
+		}
+		if (issubstring(searchBase, "boston")) {
+			retval = add(retval, [
+				["cn" , "boston_bs"],
+				["DN" , "cn=boston_bs,cn=server,cn=boston,ou=ut,o=novell,c=us"],
+				["objectClass"   , "scBranchServer"],
+				["scRefServerDn" , "scXXX"],
+				["scPubKey"      , "4lad6df98ad"],
+				["objectClass", "top"],
+				["objectClass", objectClass]
+			]);
+		}
+	}
+	else if (objectClass == "scWorkstation") {
+		if (issubstring(searchBase, "provo")) {
+			retval = add(retval, [
+				["DN"                            , "cn=CR001,cn=provo,ou=ut,o=novell,c=us"],
+				["macAddress"                    , "00:09:6B:27:C9:C8"],
+				["cn"                            , "CR001"],
+				["ipHostNumber"                  , "10.0.0.2"],
+				["objectClass"                   , "scWorkstation"],
+				["scRefPcDn"                     , "cn=crtype3,cn=global,o=novell,c=us"],
+				["scPosRegisterBiosVersion"      , "X5KT221"],
+				["scNotifiedImage"               , "image/minimal-2.1.8"],
+				["objectClass", "top"],
+				["objectClass", objectClass]
+			]);
+			retval = add(retval, [
+				["DN"                            , "cn=CR002,cn=provo,ou=ut,o=novell,c=us"],
+				["macAddress"                    , "00:02:55:E3:1C:BC"],
+				["cn"                            , "CR002"],
+				["ipHostNumber"                  , "10.0.0.3"],
+				["objectClass"                   , "scWorkstation"],
+				["scRefPcDn"                     , "cn=crtype1,cn=global,o=novell,c=us"],
+				["scPosRegisterBiosVersion"      , "K.10"],
+				["scNotifiedImage"               , "image/desktop_kde_3_pwd_users_keep_rpm-2.1.8"],
+				["objectClass", "top"],
+				["objectClass", objectClass]
+			]);
+			retval = add(retval, [
+				["DN"                            , "cn=CR003,cn=provo,ou=ut,o=novell,c=us"],
+				["macAddress"                    , "00:06:29:E3:CF:39"],
+				["cn"                            , "CR003"],
+				["ipHostNumber"                  , "10.0.0.4"],
+				["objectClass"                   , "scWorkstation"],
+				["scRefPcDn"                     , "cn=crtype2,cn=global,o=novell,c=us"],
+				["scPosRegisterBiosVersion"      , "X4KT123"],
+				["objectClass", "top"],
+				["objectClass", objectClass]
+			]);
+			retval = add(retval, [
+				["DN"                            , "cn=CR004,cn=provo,ou=ut,o=novell,c=us"],
+				["macAddress"                    , "00:01:29:F3:89:F4"],
+				["cn"                            , "CR004"],
+				["ipHostNumber"                  , "10.0.0.5"],
+				["objectClass"                   , "scWorkstation"],
+				["scRefPcDn"                     , "cn=crtype5,cn=global,o=novell,c=us"],
+				["scPosRegisterBiosVersion"      , "82KT005"],
+				["scNotifiedImage"               , "image/desktop-2.1.8"],
+				["objectClass", "top"],
+				["objectClass", objectClass]
+			]);
+			retval = add(retval, [
+				["DN"                            , "cn=CR005,cn=provo,ou=ut,o=novell,c=us"],
+				["macAddress"                    , "00:09:6B:27:C9:C8"],
+				["cn"                            , "CR005"],
+				["ipHostNumber"                  , "10.0.0.2"],
+				["objectClass"                   , "scWorkstation"],
+				["scRefPcDn"                     , "cn=crtype3,cn=global,o=novell,c=us"],
+				["scPosRegisterBiosVersion"      , "X5KT221"],
+				["scNotifiedImage"               , "image/minimal-2.1.8"],
+				["objectClass", "top"],
+				["objectClass", objectClass]
+			]);
+			retval = add(retval, [
+				["DN"                            , "cn=CR006,cn=provo,ou=ut,o=novell,c=us"],
+				["macAddress"                    , "00:02:55:E3:1C:BC"],
+				["cn"                            , "CR006"],
+				["ipHostNumber"                  , "10.0.0.3"],
+				["objectClass"                   , "scWorkstation"],
+				["scRefPcDn"                     , "cn=crtype1,cn=global,o=novell,c=us"],
+				["scPosRegisterBiosVersion"      , "K.10"],
+				["scNotifiedImage"               , "image/desktop_kde_3_pwd_users_keep_rpm-2.1.8"],
+				["objectClass", "top"],
+				["objectClass", objectClass]
+			]);
+			retval = add(retval, [
+				["DN"                            , "cn=CR007,cn=provo,ou=ut,o=novell,c=us"],
+				["macAddress"                    , "00:06:29:E3:CF:39"],
+				["cn"                            , "CR007"],
+				["ipHostNumber"                  , "10.0.0.4"],
+				["objectClass"                   , "scWorkstation"],
+				["scRefPcDn"                     , "cn=crtype2,cn=global,o=novell,c=us"],
+				["scPosRegisterBiosVersion"      , "X4KT123"],
+				["objectClass", "top"],
+				["objectClass", objectClass]
+			]);
+		}
+		if (issubstring(searchBase, "boston")) {
+			retval = add(retval, [
+				["DN"                            , "cn=CR001,cn=boston,ou=ma,o=novell,c=us"],
+				["macAddress"                    , "00:09:6B:27:C9:C8"],
+				["cn"                            , "CR001"],
+				["ipHostNumber"                  , "10.0.0.2"],
+				["objectClass"                   , "scWorkstation"],
+				["scRefPcDn"                     , "cn=crtype3,cn=global,o=novell,c=us"],
+				["scPosRegisterBiosVersion"      , "X5KT221"],
+				["scNotifiedImage"               , "image/minimal-2.1.8"],
+				["objectClass", "top"],
+				["objectClass", objectClass]
+			]);
+			retval = add(retval, [
+				["DN"                            , "cn=CR002,cn=boston,ou=ma,o=novell,c=us"],
+				["macAddress"                    , "00:02:55:E3:1C:BC"],
+				["cn"                            , "CR002"],
+				["ipHostNumber"                  , "10.0.0.3"],
+				["objectClass"                   , "scWorkstation"],
+				["scRefPcDn"                     , "cn=crtype1,cn=global,o=novell,c=us"],
+				["scPosRegisterBiosVersion"      , "K.10"],
+				["scNotifiedImage"               , "image/desktop_kde_3_pwd_users_keep_rpm-2.1.8"],
+				["objectClass", "top"],
+				["objectClass", objectClass]
+			]);
+		}
+	}
+	else if (objectClass == "scPosImage") {
+		retval = add(retval, [
+			["cn"    , "minimal"],
+			["DN"    , "cn=minimal,cn=default,cn=global,o=novell,c=us"],
+			["objectClass"   , "scPosImage"],
+			["objectClass", "top"],
+			["scImageName"    , "minimal"],
+			["scImageFile"    , "minimal"],
+			["scPosImageVersion"    , "2.1.8;active"],
+			["scDhcpOptionsRemote"    , "/boot/pxelinux.0"],
+			["scBsize"    , "8192"],
+			["scDhcpOptionsLocal"    , "LOCALBOOT"]
+		]);
+		retval = add(retval, [
+			["cn"    , "browser"],
+			["DN"    , "cn=browser,cn=default,cn=global,o=novell,c=us"],
+			["objectClass"   , "scPosImage"],
+			["objectClass", "top"],
+			["scImageName"    , "browser"],
+			["scImageFile"    , "browser"],
+			["scPosImageVersion"    , "2.1.8;active"],
+			["scDhcpOptionsRemote"    , "/boot/pxelinux.0"],
+			["scBsize"    , "8192"],
+			["scDhcpOptionsLocal"    , "LOCALBOOT"],
+			["scConfigFile"    , "/etc/X11/XF86Config"]
+		]);
+		retval = add(retval, [
+			["cn"    , "desktop"],
+			["DN"    , "cn=desktop,cn=default,cn=global,o=novell,c=us"],
+			["objectClass"   , "scPosImage"],
+			["objectClass", "top"],
+			["scImageName"    , "desktop"],
+			["scImageFile"    , "desktop"],
+			["scPosImageVersion"    , "2.1.8;active"],
+			["scDhcpOptionsRemote"    , "/boot/pxelinux.0"],
+			["scBsize"    , "8192"],
+			["scDhcpOptionsLocal"    , "LOCALBOOT"],
+			["scConfigFile"    , "/etc/X11/XF86Config"]
+		]);
+	}
+	else if (objectClass == "scCashRegister") {
+		retval = add(retval, [
+			["DN"    , "cn=crtype1,cn=global,o=novell,c=us"],
+			["scPosImageDn"    , "cn=minimal,cn=default,cn=global,o=novell,c=us"],
+			["cn"    , "crtype1"],
+			["scDiskJournal"    , "TRUE"],
+			["objectClass"   , "scCashRegister"],
+			["objectClass", "top"],
+			["scCashRegisterName"    , "IBM"]
+		]);
+		retval = add(retval, [
+			["DN"    , "cn=crtype2,cn=global,o=novell,c=us"],
+			["scPosImageDn"    , "cn=java,cn=default,cn=global,o=novell,c=us"],
+			["cn"    , "crtype2"],
+			["objectClass"   , "scCashRegister"],
+			["objectClass", "top"],
+			["scCashRegisterName"    , "IBM4840562"]
+		]);
+		retval = add(retval, [
+			["DN"    , "cn=crtype3,cn=global,o=novell,c=us"],
+			["scPosImageDn"    , "cn=java,cn=default,cn=global,o=novell,c=us"],
+			["cn"    , "crtype3"],
+			["objectClass"   , "scCashRegister"],
+			["objectClass", "top"],
+			["scCashRegisterName"    , "IBM4840563"]
+		]);
+		retval = add(retval, [
+			["DN"    , "cn=crtype4,cn=global,o=novell,c=us"],
+			["scPosImageDn"    , "cn=browser,cn=default,cn=global,o=novell,c=us"],
+			["cn"    , "crtype4"],
+			["objectClass"   , "scCashRegister"],
+			["objectClass", "top"],
+			["scCashRegisterName"    , "IBM4694245"]
+		]);
+		retval = add(retval, [
+			["DN"    , "cn=crtype5,cn=global,o=novell,c=us"],
+			["scPosImageDn"    , "cn=desktop,cn=default,cn=global,o=novell,c=us"],
+			["cn"    , "crtype5"],
+			["objectClass"   , "scCashRegister"],
+			["objectClass", "top"],
+			["scCashRegisterName"    , "IBM4800782"]
+		]);
+		retval = add(retval, [
+			["DN"    , "cn=crtype6,cn=global,o=novell,c=us"],
+			["scPosImageDn"    , "cn=desktop,cn=default,cn=global,o=novell,c=us"],
+			["cn"    , "crtype6"],
+			["objectClass"   , "scCashRegister"],
+			["objectClass", "top"],
+			["scCashRegisterName"    , "IBM4800781"]
+		]);
+	}
+	else if (objectClass == "scHarddisk") {
+		retval = add(retval, [
+			["DN"    , "cn=hda,cn=crtype1,cn=global,o=novell,c=us"],
+			["scDevice"    , "/dev/hda"],
+			["scHdSize"    , "9000"],
+			["cn"    , "hda"],
+			["objectClass"   , "scHarddisk"],
+			["objectClass", "top"],
+			["scPartitionsTable"    , "1000 82 swap swap;4000 83 / ext2;"]
+		]);
+		retval = add(retval, [
+			["DN"    , "cn=hda,cn=crtype2,cn=global,o=novell,c=us"],
+			["scDevice"    , "/dev/hda"],
+			["scHdSize"    , "9000"],
+			["cn"    , "hda"],
+			["objectClass"   , "scHarddisk"],
+			["objectClass", "top"],
+			["scPartitionsTable"    , "1000 82 swap swap;4000 83 / ext2;"]
+		]);
+		retval = add(retval, [
+			["DN"    , "cn=hda,cn=crtype3,cn=global,o=novell,c=us"],
+			["scDevice"    , "/dev/hda"],
+			["scHdSize"    , "9000"],
+			["cn"    , "hda"],
+			["objectClass"   , "scHarddisk"],
+			["objectClass", "top"],
+			["scPartitionsTable"    , "1000 82 swap swap;4000 83 / ext2;"]
+		]);
+		retval = add(retval, [
+			["DN"    , "cn=hda,cn=crtype4,cn=global,o=novell,c=us"],
+			["scDevice"    , "/dev/hda"],
+			["scHdSize"    , "9000"],
+			["cn"    , "hda"],
+			["objectClass"   , "scHarddisk"],
+			["objectClass", "top"],
+			["scPartitionsTable"    , "500 82 swap swap;2000 83 / ext2;"]
+		]);
+		retval = add(retval, [
+			["DN"    , "cn=sda,cn=crtype5,cn=global,o=novell,c=us"],
+			["scDevice"    , "/dev/sda"],
+			["scHdSize"    , "9000"],
+			["cn"    , "sda"],
+			["objectClass"   , "scHarddisk"],
+			["objectClass", "top"],
+			["scPartitionsTable"    , "1000 82 swap swap;3000 83 / ext2;"]
+		]);
+	}
+	else if (objectClass == "scService") {
+		retval = add(retval, [
+			["DN"    , "cn=dhcp,cn=b32,cn=server,cn=branch,ou=provo,o=novell,c=us"],
+			["scServiceName"    , "dhcp"],
+			["scServiceStatus"    , "TRUE"],
+			["scDnsName"    , "dhcp"],
+			["scServiceStartScript"    , "dhcp"],
+			["cn"    , "dhcp"],
+			["objectClass"   , "scService"],
+			["objectClass", "top"],
+			["ipHostNumber"    , "10.0.0.1"]
+		]);
+		retval = add(retval, [
+			["DN"    , "cn=dns,cn=b32,cn=server,cn=branch,ou=provo,o=novell,c=us"],
+			["scServiceName"    , "dns"],
+			["scServiceStatus"    , "TRUE"],
+			["scDnsName"    , "dns"],
+			["scServiceStartScript"    , "named"],
+			["cn"    , "dns"],
+			["objectClass"   , "scService"],
+			["objectClass", "top"],
+			["ipHostNumber"    , "10.0.0.1"]
+		]);
+		retval = add(retval, [
+			["DN"    , "cn=tftp,cn=b32,cn=server,cn=branch,ou=provo,o=novell,c=us"],
+			["scServiceName"    , "tftp"],
+			["scServiceStatus"    , "TRUE"],
+			["scDnsName"    , "tftp"],
+			["scServiceStartScript"    , "atftpd"],
+			["cn"    , "tftp"],
+			["objectClass"   , "scService"],
+			["objectClass", "top"],
+			["ipHostNumber"    , "10.0.0.1"]
+		]);
+	}
+	else if (objectClass == "scRefObjectContainer") {
+		retval = add(retval, [
+			["DN"    , "cn=global,o=novell,c=us"],
+			["objectClass"   , "scRefObjectContainer"],
+			["objectClass", "top"],
+			["cn"    , "global"]
+		]);
+	}
+	else if (objectClass == "scDistributionContainer") {
+		retval = add(retval, [
+			["DN"    , "cn=default,cn=global,o=novell,c=us"],
+			["objectClass"   , "scDistributionContainer"],
+			["objectClass", "top"],
+			["cn"    , "default"],
+			["scInitrdName"    , "initrd.gz"],
+			["scKernelVersion"    , "2.6.5"],
+			["scKernelMatch"    , "MATCH_VERSION"],
+			["scKernelName"    , "linux"]
+		]);
+		retval = add(retval, [
+			["DN"    , "cn=SLRS8,cn=global,o=novell,c=us"],
+			["objectClass"   , "scDistributionContainer"],
+			["objectClass", "top"],
+			["cn"    , "SLRS8"],
+			["scInitrdName"    , "initrd.gz"],
+			["scKernelVersion"    , "2.6.5"],
+			["scKernelMatch"    , "MATCH_VERSION"],
+			["scKernelName"    , "linux"]
+		]);
+	}
+	return retval;
+}
+
+
+/**
+ * Return a list of lists for a specified LDAP object class.
+ * @param string ldap objectClass, string base for LDAP search (if empty or nil, will use the ALL_LDAPBASE), boolean dispalyUI for if this method should display a Popup::ShowFeedback message 
+ * @return list [ list [ list [string, string] ] ]
+ */
+global list <list <list <string> > > GetObjectsFromLDAP(string objectClass, string searchBase, boolean displayUI) {
+	y2milestone("GetObjectFromLDAP(%1, %2, %3)", objectClass, searchBase, displayUI);
+
+
+	if (Mode::test())   // This is the correct code for SLES10
+		return debugLDAP(objectClass, searchBase); // FIXME: this line is for debugging only! Must be removed! SLES10
+
+
+	string displayObjectClass = ReturnTextForObjectClass(objectClass);
+
+	if (displayUI) Popup::ShowFeedback(sformat(_("Reading %1 Settings"), displayObjectClass), _("Please wait..."));
+	if (searchBase == nil || searchBase == "") searchBase = SettingsMap["ALL_LDAPBASE"]:"";
+	string cmd = sformat("/usr/sbin/posAdmin.pl --password '%1' --user '%2' --base '%3' --query '--%4'", SettingsMap["POS_ADMIN_PASSWORD"]:"", SettingsMap["POS_ADMIN_DN"]:"", searchBase, objectClass);
+	string display_cmd = regexpsub(cmd, "(.*)--password.*(--user.*)", "\\1--password '********' \\2"); // NOTE: we should never display the password in the y2log or to the screen!
+	y2milestone("Executing: %1", display_cmd);
+	map retmap = (map) SCR::Execute(.target.bash_output, cmd);
+	if (retmap["exit"]:-1 != 0) {
+		if (displayUI) {
+			Popup::ClearFeedback();
+			SleposUtils::errorLogging(sformat(_("An error occured while reading the %1 settings"), displayObjectClass), retmap, display_cmd);
+		}
+		return nil;
+	}
+
+	// Parse the ldapsearch output and add the values to a map
+	string searchResult = retmap["stdout"]:"";
+	list<string> lines = splitstring(searchResult, "\n");
+	y2milestone("stdout=%1", lines);
+	
+	list<list < list<string> > > searchResultList = [];
+	list<string> newResult = [];
+
+	foreach(string line, lines, {
+		if (line == nil || line == "") { // All values(lines) for a single object have been read into the newResult list
+			newResult = filter(string v, newResult, {return (v != "");}); // remove all empty strings
+
+			// split each list element into another list containing key/value pairs.
+			// NOTE: A map cannot be used here! LDAP will return multiple values that contain the same key. This results in loss of values for certain keys in the directory.
+			list< list <string> > newResultListList = maplist (string line, newResult, {
+				list tokens = regexptokenize(line, "^(.*):[ \t\n](.*)");
+				y2milestone("tokens: %1", tokens);
+				if (size(tokens) == 2) {
+					string a = SleposUtils::Strip(tokens[0]:"", " \t\n");
+					string b = SleposUtils::Strip(tokens[1]:"", " \t\n");
+					if (a != nil && a != "")
+						if (b != nil && b != "")
+							return [a,b];
+				}
+				return [""]; // must with something in the list (YaST will throw an error if an empty list is returned)
+			});
+
+			y2milestone("newResultListList=%1", newResultListList);
+			newResultListList = filter(list<string> v, newResultListList, { return (v[0]:"" != ""); }); // remove all empty string keys
+
+			// if list is not empty and list contains a valid 'DN' key, add it to the list of objects
+			if (newResultListList != nil && size(newResultListList) > 0) {
+				string dn_value = getObjectValue("DN", newResultListList);
+				if (dn_value != nil && dn_value != "") {
+					if (regexpmatch(dn_value, sformat(".*%1", searchBase))) { // NOTE: must make sure the base is correct. See bugzilla #146188
+						searchResultList = add(searchResultList, newResultListList);
+					}
+				}
+			}
+			newResult = []; // empty the list for the next object
+		}
+		if ( ! regexpmatch(line, "^#") ) newResult = add(newResult, line); // if line is not a commented line, add it to the newResult list.
+	});
+
+	if (displayUI) Popup::ClearFeedback();
+
+	y2milestone("searchResultList=%1", searchResultList);
+	return searchResultList;
+}
+
+
+/**
+ * Returns the base of a given LDAP dn.
+ * For example: cn=branch,ou=provo,o=novell,c=us -> ou=provo,o=novell,c=us
+ * @param string dn
+ * @return string base
+ */
+global string getLdapBaseFromDn(string dn) {
+	if (dn == nil || dn == "") return "";
+	list<string> base = splitstring(dn, ",");
+	base = remove(base, 0); // remove the 1st element, leaving behind the base.
+	return mergestring(base, ",");
+}
+
+/**
+ * Add/Modify an object to LDAP using posAdmin.pl
+ * @param list <list <string> > settings for the ldap object
+ * @return boolean true on success
+ */
+global boolean modifyObjectToLDAP(list <list <string> > ldap_object) {
+	y2milestone("modifyObjectToLDAP(%1)", ldap_object);
+
+	string dn = getObjectValue("DN", ldap_object);
+	if (dn == nil || dn == "") {
+		y2error("A valid DN was not specfied in the list of ldap_objects");
+		return false;
+	}
+	ldap_object = removeObjectValues("DN", ldap_object);
+
+	string objectClass = getObjectValue("objectClass", ldap_object);
+	if (objectClass == nil || objectClass == "") {
+		y2error("A valid objectClass was not specified in the list of ldap_objects");
+		return false;
+	}	
+	ldap_object = removeObjectValues("objectClass", ldap_object);
+
+
+	// query for the object to be sure one does not already exist
+	list <list <list <string> > > current_objects = GetObjectsFromLDAP(objectClass, nil, false);
+	list <list <string> > values = getObjectFromList(dn, current_objects);
+	boolean newObject = true;
+	if ( values != nil && size(values) > 0 ) newObject = false; // object already exists...lets modify it!
+
+	string cmd = sformat("/usr/sbin/posAdmin.pl --password '%1' --user '%2'",
+					SettingsMap["POS_ADMIN_PASSWORD"]:"",
+					SettingsMap["POS_ADMIN_DN"]:""
+			);
+
+	if ( newObject) { // object does not exist
+		// generate the ldap add command
+		cmd = sformat("%1 --base '%2' --add --%3",
+					cmd,
+					getLdapBaseFromDn(dn),
+					objectClass
+				);
+	}
+	else {// the object already exists, posAdmin.pl --modify
+		// generate the ldap modify command
+		cmd = sformat("%1 --DN '%2' --modify --%3",
+					cmd,
+					dn,
+					objectClass
+				);
+	}
+	
+
+	// add the object values to the end of the cmd
+	foreach(list<string> value, ldap_object, {
+		if (value[0]:nil != nil && value[0]:"" != "" && value[1]:nil != nil && value[1]:"" != "") // only add the value WITH QUOTES ('') if the value is defined...don't add empty values with two single quotes ('').
+			cmd = sformat("%1 --%2 '%3'", cmd, value[0]:"", value[1]:"");
+		else if (newObject == false && value[0]:nil != nil && value[0]:"" != "" && (value[1]:nil == nil || value[1]:"" == "")) // if this is an EXISTING object and the key exists, but the value is empty add it WITHOUT the single quotes ('').  DO NOT DO THIS ON NEW OBJECTS. posAdmin.pl --add with throw an error!
+			cmd = sformat("%1 --%2 %3", cmd, value[0]:"", value[1]:"");
+	});
+	
+	string display_cmd = regexpsub(cmd, "(.*)--password.*(--user.*)", "\\1--password '********' \\2"); // NOTE: we should never display the password in the y2log or to the screen!
+
+	y2milestone("Executing: %1", display_cmd);
+	map retmap = (map) SCR::Execute(.target.bash_output, cmd);
+	if (retmap["exit"]:-1 != 0) {
+		string objectClassText = ReturnTextForObjectClass(objectClass);
+		string errmsg = "";
+		if (objectClassText != nil && objectClassText != "") errmsg = sformat(_("A error occured while modifying the %1"), objectClassText);
+		else errmsg = _("A error occured while modifying the selected object");
+		SleposUtils::errorLogging(errmsg, retmap, display_cmd);
+		return false;
+	}
+	return true;
+}
+
+
+/**
+ * Creates a Location LDAP object (scLocation), using a specified DNS host name.
+ * Will autocrete the LDAP structure for each organizational unit (organizationalUnit) that is part of the DNS hostname
+ * @param map with all the scLocation settings
+ * @return boolean true on success
+ */
+global boolean add_scLocation(list <list <string> > ldap_object) {
+	Popup::ShowFeedback(_("Modifying Branch Location"), _("Please wait..."));
+	y2milestone("add_scLocation(%1)", ldap_object);
+	string location = getObjectValue("location", ldap_object);
+	if (location == nil || location == "") {
+		y2error("Call to SleposSystemManager::add_scLocation(%1) does not contain a dns hostname", ldap_object);
+		return false;
+	}
+	ldap_object = removeObjectValues("location", ldap_object);
+
+	list<string> tokens = splitstring(location, ".");
+	
+	// use the location (DNS domain name) to create all the required LDAP organizational units
+	integer pos = size(tokens) - 1;
+	list<string> base = [];
+	base = prepend(base, sformat("c=%1", tokens[pos]:"")); // last element should be 'c='
+	pos = pos - 1;
+	base = prepend(base, sformat("o=%1", tokens[pos]:"")); // 2nd to last element should be 'o='
+	pos = pos - 1;
+	while(pos > 0) { // 1st element in the list is the name of the location object
+		base = prepend(base, sformat("ou=%1", tokens[pos]:"")); // all other elements should be 'ou='
+		if (!modifyObjectToLDAP([["DN", mergestring(base, ",")], ["objectClass", "organizationalUnit"], ["ou", tokens[pos]:""]])) return false;
+		pos = pos - 1;
+	}
+
+	base = prepend(base, sformat("cn=%1", tokens[0]:"")); // scLocation element should be 'cn='
+	string new_dn = mergestring(base, ","); // new scLocation DN generated from the DNS domain name
+
+	string old_dn = getObjectValue("DN", ldap_object);
+	if (old_dn != nil && old_dn != "" && old_dn != new_dn) {
+		// FIXME: must recursively change all the DN's for the all the subobects to this object so that they don't get lost!
+	}
+
+	// create/modify the scLocation object
+	ldap_object = setObjectValues("DN", new_dn, ldap_object);
+	if (!modifyObjectToLDAP(ldap_object)) return false;
+	return true;
+}
+
+
+
+/**
+ * Creates BranchServer LDAP objects (scBranchServer)
+ * Will also autocreate the server container (scServerContainter) if neccessary.
+ * @param map with all the scBranchServer settings
+ * @return boolean true on success
+ */
+global boolean add_scBranchServer(list <list <string> > ldap_object, string base) {
+	y2milestone("add_scBranchServer(%1, %2)", ldap_object, base);
+	string dn = getObjectValue("DN", ldap_object);
+	if (dn == nil || dn == "") { // New object
+		Popup::ShowFeedback(_("Adding Branch Server"), _("Please wait..."));
+		
+		if (base == nil || base == "") {
+			y2error("add_scBranchServer called without specifing a valid LDAP base!");
+			return false;
+		}
+
+		// does a server container (scServerContainer) exist in this base
+		string container_dn = "";
+		// query for a server container to be sure one does not already exist
+		list <list <list <string> > > current_objects = GetObjectsFromLDAP("scServerContainer", base, false);
+		foreach( list <list <string> > server_container, current_objects, {
+			string tmp_container_dn = getObjectValue("DN", server_container);
+			if (regexpmatch(tmp_container_dn, sformat(".*%1", base))) { // NOTE: must make sure the base is correct. See bugzilla #146188
+				// server container found, don't create a new one.
+				container_dn = tmp_container_dn;
+				break;
+			}
+		});
+		if (container_dn == nil || container_dn == "") { 
+			// no scServerContainer...let's create one.
+			string container_cn = "server";
+			container_dn = sformat("cn=%1,%2", container_cn, base);
+			if (!modifyObjectToLDAP([["DN", container_dn], ["objectClass", "scServerContainer"], ["cn", container_cn]])) return false;
+		}
+
+		// Figure out the DN for the new scBranchServer object
+		string cn = getObjectValue("cn", ldap_object);
+		dn = sformat("cn=%1,%2", cn, container_dn);
+		ldap_object = setObjectValues("DN", dn, ldap_object);
+	}
+	else Popup::ShowFeedback(_("Modifying Branch Server"), _("Please wait..."));
+
+	// create/modify the scBranchServer object
+	if (!modifyObjectToLDAP(ldap_object)) return false;
+	return true;
+}
+
+
+
+
+
+/**
+ * Read all slepos-system-manager settings
+ * @return true on success
+ */
+global boolean Read() {
+
+	/* SleposSystemManager read dialog caption */
+	string caption = _("Initializing System Manager");
+
+	integer steps = 2;
+
+	integer sl = 500;
+	sleep(sl);
+
+
+	Progress::New( caption, " ", steps, [
+		/* Progress stage 1/1 */
+		_("Read System Manager settings"),
+		], [
+		/* Progress step 1/1 */
+		_("Reading System Manager settings..."),
+		/* Progress finished */
+		_("Finished")
+		],
+		""
+	);
+
+	// read LDAP settings
+	if(Abort()) return false;
+	Progress::NextStage();
+
+	// read admin DN and password from the conf file (/etc/opt/SLES/POS/adminserver.conf)
+	string adminDN = (string)SCR::Read(.slepos_system_manager.POS_ADMIN_DN);
+	string password = (string)SCR::Read(.slepos_system_manager.POS_ADMIN_PASSWORD);
+	string base = (string)SCR::Read(.slepos_system_manager.ALL_LDAPBASE);
+	if (adminDN == nil || adminDN == "" || password == nil || password == "" || base == nil || base == "") {
+		// FIXME:  Must fix below error message to be more descriptive. Would be a good idea to point the user to the YaST module for posLDAPInit.pl
+		Report::Error(_("An error occured while reading the system manager settings.\n\nPlease ensure FIXME! (add name of the posLDAPInit.pl YaST module???) "));
+		return false;
+	}
+	SettingsMap["POS_ADMIN_DN"] = adminDN;
+	SettingsMap["POS_ADMIN_PASSWORD"] = password;
+	SettingsMap["ALL_LDAPBASE"] = base;
+
+	sleep(sl);
+
+	if(Abort()) return false;
+	/* Progress finished */
+	Progress::NextStage();
+	sleep(sl);
+
+	if(Abort()) return false;
+	modified = false;
+	return true;
+}
+
+
+/* EOF */
+}

@@ -1,0 +1,417 @@
+/**
+ * File:	include/slepos-system-manager/dialogs.ycp
+ * Package:	Configuration of slepos-system-manager
+ * Summary:	Dialogs definitions
+ * Authors:	Michael G. Fritch <mgfritch@novell.com>
+ *
+ * $Id: dialogs.ycp,v 1.6 2004/02/05 11:29:30 msvec Exp $
+ */
+
+{
+
+textdomain "slepos-system-manager";
+
+import "Label";
+import "Wizard";
+import "SleposSystemManager";
+
+////FIXME: SleposDialogTree is for SLES9 only! When this module moves to SLES 10 must use the DialogTree module provided by SuSE!
+//import "SleposDialogTree"; // SLES9
+import "DialogTree"; // SLES10
+
+include "slepos-system-manager/helps.ycp";
+include "slepos-system-manager/complex.ycp";
+include "slepos-system-manager/subdialogs.ycp";
+include "slepos-system-manager/uifunctions.ycp";
+
+
+/**
+ * Dialog actions for each tree item
+ */
+map<string,map<string,any> > widgets_handling = $[
+	"scLocation" : $[
+		"widget"	: `custom,
+		"custom_widget"	: `VBox(),
+		"init"		: InitscLocationTableDialog,
+		"handle"	: HandlescLocationTableDialog,
+		//"store"	: NoStoreNeeded,
+		"help"		: HelpForDialog("scLocation"),
+	],
+	"scBranchServer_scWorkstation" : $[
+		"widget"	: `custom,
+		"custom_widget"	: `VBox(),
+		"init"		: Init_scBranchServer_scWorkstation_TableDialog,
+		"handle"	: Handle_scBranchServer_scWorkstation_TableDialog,
+		//"store"	: NoStoreNeeded,
+		"help"		: HelpForDialog("scBranchServer_scWorkstation"),
+	],
+	"scBranchServerChildren" : $[
+		"widget"	: `custom,
+		"custom_widget"	: `VBox(),
+		"init"		: InitObjectTableDialog,
+		"handle"	: HandleObjectTableDialog,
+		//"store"	: NoStoreNeeded,
+		"help"		: HelpForDialog("scBranchServerChildren"),
+	],
+	"scWorkstationChildren" : $[
+		"widget"	: `custom,
+		"custom_widget"	: `VBox(),
+		"init"		: InitObjectTableDialog,
+		"handle"	: HandleObjectTableDialog,
+		//"store"	: NoStoreNeeded,
+		"help"		: HelpForDialog("scWorkstationChildren"),
+	],
+	"scRefObjectContainer" : $[
+		"widget"	: `custom,
+		"custom_widget"	: `VBox(),
+		"init"		: InitscRefObjectContainerTableDialog,
+		"handle"	: HandlescRefObjectContainerTableDialog,
+		//"store"	: NoStoreNeeded,
+		"help"		: HelpForDialog("scRefObjectContainer"),
+	],
+	"scDistributionContainer_scCashRegister" : $[
+		"widget"	: `custom,
+		"custom_widget"	: `VBox(),
+		"init"		: Init_scDistributionContainer_scCashRegister_TableDialog,
+		"handle"	: Handle_scDistributionContainer_scCashRegister_TableDialog,
+		//"store"	: NoStoreNeeded,
+		"help"		: HelpForDialog("scDistributionContainer_scCashRegister"),
+	],
+	"scPosImage" : $[
+		"widget"	: `custom,
+		"custom_widget"	: `VBox(),
+		"init"		: InitscPosImageTableDialog,
+		"handle"	: HandlescPosImageTableDialog,
+		//"store"	: NoStoreNeeded,
+		"help"		: HelpForDialog("scPosImage"),
+	],
+	"scCashRegisterChildren" : $[
+		"widget"	: `custom,
+		"custom_widget"	: `VBox(),
+		"init"		: InitObjectTableDialog,
+		"handle"	: HandleObjectTableDialog,
+		//"store"	: NoStoreNeeded,
+		"help"		: HelpForDialog("scCashRegisterChildren"),
+	],
+];
+
+
+// Main part of dialog title
+string admin_caption = _("System Manager");
+
+
+/**
+ * Dialogs for each tree item
+ */
+map<string, map<string, any> > screens = $[
+	"@BranchLocations" : $[
+		"contents" : `VBox (
+			scLocationTableDialog(),
+			`VSpacing (1)
+		),
+		// TRANSLATORS: part of dialog caption
+		"caption"		: admin_caption + " - " + _("Branch Locations"),
+		// TRANSLATORS: tree menu item
+		"tree_item_label"	: _("Branch Locations"),
+		"widget_names"		: [ "scLocation" ]
+	],
+	"scLocation" : $[
+		"contents" : `VBox (
+			scBranchServer_scWorkstation_TableDialog(),
+			`VSpacing (1)
+		),
+		// TRANSLATORS: part of dialog caption
+		"caption"		: admin_caption + " - " + _("Branch Servers / Workstations"),
+		// TRANSLATORS: tree menu item
+		"tree_item_label"	: _("Branch Servers / Workstations"),
+		"widget_names"		: [ "scBranchServer_scWorkstation" ]
+	],
+	"scBranchServer" : $[
+		"contents" : `VBox (
+			ObjectTableDialog(_("Branch Server Objects")),
+			`VSpacing (1)
+		),
+		// TRANSLATORS: part of dialog caption
+		"caption"		: admin_caption + " - " + _("Branch Server Objects"),
+		// TRANSLATORS: tree menu item
+		"tree_item_label"	: _("Branch Server Objects"),
+		"widget_names"		: [ "scBranchServerChildren" ]
+	],
+	"scWorkstation" : $[
+		"contents" : `VBox (
+			ObjectTableDialog(_("Workstation Objects")),
+			`VSpacing (1)
+		),
+		// TRANSLATORS: part of dialog caption
+		"caption"		: admin_caption + " - " + _("Workstation Objects"),
+		// TRANSLATORS: tree menu item
+		"tree_item_label"	: _("Workstation Objects"),
+		"widget_names"		: [ "scWorkstationChildren" ]
+	],
+	"@ReferenceObjects" : $[
+		"contents" : `VBox (
+			scRefObjectContainerTableDialog(),
+			`VSpacing (1)
+		),
+		// TRANSLATORS: part of dialog caption
+		"caption"		: admin_caption + " - " + _("Reference Object Containers"),
+		// TRANSLATORS: tree menu item
+		"tree_item_label"	: _("Reference Object Containers"),
+		"widget_names"		: [ "scRefObjectContainer" ]
+	],
+	"scRefObjectContainer" : $[
+		"contents" : `VBox (
+			scDistributionContainer_scCashRegister_TableDialog(),
+			`VSpacing (1)
+		),
+		// TRANSLATORS: part of dialog caption
+		"caption"		: admin_caption + " - " + _("Distribution Containers / Hardware Reference Objects"),
+		// TRANSLATORS: tree menu item
+		"tree_item_label"	: _("Distribution Containers / Hardware Reference Objects"),
+		"widget_names"		: [ "scDistributionContainer_scCashRegister" ]
+	],
+	"scDistributionContainer" : $[
+		"contents" : `VBox (
+			scPosImageTableDialog(),
+			`VSpacing (1)
+		),
+		// TRANSLATORS: part of dialog caption
+		"caption"		: admin_caption + " - " + _("Image Reference Objects"),
+		// TRANSLATORS: tree menu item
+		"tree_item_label"	: _("Image Reference Object"),
+		"widget_names"		: [ "scPosImage" ]
+	],
+	"scCashRegister" : $[
+		"contents" : `VBox (
+			ObjectTableDialog(_("Hardware Reference Objects")),
+			`VSpacing (1)
+		),
+		// TRANSLATORS: part of dialog caption
+		"caption"		: admin_caption + " - " + _("Hardware Reference Objects"),
+		// TRANSLATORS: tree menu item
+		"tree_item_label"	: _("Hardware Reference Objects"),
+		"widget_names"		: [ "scCashRegisterChildren" ]
+	],
+];
+
+
+/**
+ * Pop-up confiming `abort button press
+ */
+map<symbol,any> functions = $[ 
+	`abort : ReallyAbort,
+];
+
+
+list<map> InternalTree = [ // Data structure for laying out figuring out the Tree before it is converted into the DispalyTree.
+		$["id":"@ReferenceObjects", "parent":"", "title":_("Reference Objects")], 
+		$["id":"@BranchLocations", "parent":"", "title":_("Branch Locations")]
+]; 
+
+/**
+ * Recursively removes all children for a specified parent in the InternalTree list
+ * @param string parent id
+ * @return boolean true on success
+ */
+boolean RemoveTreeChildren(string parent) {
+	list<string> children = []; // list of children
+	// Filter out all elements that have the parent value and figure out who their children are.
+	InternalTree = filter(map element, InternalTree, {
+		if (element["parent"]:"" == parent) children = add(children, element["id"]:"");
+		return (element["parent"]:"" != parent); 
+	});
+	if (InternalTree == nil) return false;
+	// recursively remove all the children too.
+	boolean success = true;
+	foreach (string child, children, {
+		success = RemoveTreeChildren(child);
+	});
+	return success;
+}
+
+
+boolean InitDialogTree2(list<map> objectMapList, boolean addToTree) {
+	boolean success = true;
+	string current_screen = SleposSystemManager::SettingsMap["current_screen"]:"";
+
+	// clear out the old objects
+	if (!RemoveTreeChildren(current_screen)) success = false;
+	SleposSystemManager::known_ldap_objects = [];
+	
+	// Initialize known_ldap_objects and InternalTree with the new objects
+	foreach (map objectMap, objectMapList, {
+		string objectClass = objectMap["objectClass"]:"";
+		string searchBase = objectMap["searchBase"]:"";
+		SleposSystemManager::known_ldap_objects = (list <list <list <string> > >) union(SleposSystemManager::known_ldap_objects, SleposSystemManager::GetObjectsFromLDAP(objectClass, searchBase, true));
+		foreach (list <list <string> > object, SleposSystemManager::known_ldap_objects, {
+			if (SleposSystemManager::getObjectValue("objectClass", object) == objectClass && addToTree) {
+				string dn = SleposSystemManager::getObjectValue("DN", object);
+				string cn = SleposSystemManager::getObjectValue("cn", object);
+				string TreeID = sformat("%1@%2", dn, objectClass);
+				InternalTree = add(InternalTree, $["id":TreeID, "title":cn, "parent":current_screen]);
+				screens[TreeID] = screens[objectClass]:$[];
+			}
+		});
+	});
+	return success;
+}
+
+
+/**
+ * Initializes SleposSystemManager::known_ldap_objects, InternalTree, and screens map (above) using
+ * the currently selected element(SleposSystemManager::current_screen) in the DisplayTree.
+ * @return true on success 
+ */
+boolean InitDialogTree() {
+	boolean success = true;
+	string current_screen = SleposSystemManager::SettingsMap["current_screen"]:"";
+	list<map> objectMapList = [];
+	map objectMap = $[];
+	string screenObjectClass = regexpsub(current_screen, "(.*)@(.*)", "\\2");
+	string searchBase = regexpsub(current_screen, "(.*)@(.*)", "\\1");
+	y2milestone("current_screen=%1", current_screen);
+	y2milestone("screenObjectClass=%1", screenObjectClass);
+	y2milestone("searchBase=%1", searchBase);
+	if(current_screen == nil || current_screen == "" || screenObjectClass == "BranchLocations") {
+		// read in the location objects
+		objectMap["objectClass"] = "scLocation";
+		objectMapList = add(objectMapList, objectMap);
+		if (!InitDialogTree2(objectMapList, true)) success = false;
+	}
+	else if (screenObjectClass == "scLocation") {
+		// read in the branch server objects
+		objectMap["objectClass"] = "scBranchServer";
+		objectMap["searchBase"] = searchBase;
+		objectMapList = add(objectMapList, objectMap);
+		// read in the workstation objects
+		objectMap["objectClass"] = "scWorkstation";
+		objectMap["searchBase"] = searchBase;
+		objectMapList = add(objectMapList, objectMap);
+		if (!InitDialogTree2(objectMapList, true)) success = false;
+	}
+	else if (screenObjectClass == "ReferenceObjects") {
+		// read in the Reference object containers objects
+		objectMap["objectClass"] = "scRefObjectContainer";
+		objectMap["searchBase"] = searchBase;
+		objectMapList = add(objectMapList, objectMap);
+		if (!InitDialogTree2(objectMapList, true)) success = false;
+	}
+	else if (screenObjectClass == "scRefObjectContainer") {
+		// read in the distribution containers objects
+		objectMap["objectClass"] = "scDistributionContainer";
+		objectMap["searchBase"] = searchBase;
+		objectMapList = add(objectMapList, objectMap);
+		// read in the hardware reference objects
+		objectMap["objectClass"] = "scCashRegister";
+		objectMap["searchBase"] = searchBase;
+		objectMapList = add(objectMapList, objectMap);
+		if (!InitDialogTree2(objectMapList, true)) success = false;
+	}
+	else if (screenObjectClass == "scDistributionContainer") {
+		// read in the image reference objects
+		objectMap["objectClass"] = "scPosImage";
+		objectMap["searchBase"] = searchBase;
+		objectMapList = add(objectMapList, objectMap);
+		if (!InitDialogTree2(objectMapList, false)) success = false;
+	}
+	else if (screenObjectClass == "scCashRegister" || screenObjectClass == "scWorkstation") {
+		// read in the scHarddisk objects
+		objectMap["objectClass"] = "scHarddisk";
+		objectMap["searchBase"] = searchBase;
+		objectMapList = add(objectMapList, objectMap);
+		// read in the scRamDisk objects
+		objectMap["objectClass"] = "scRamDisk";
+		objectMap["searchBase"] = searchBase;
+		objectMapList = add(objectMapList, objectMap);
+		// read in the scConfigFileSyncTemplate objects
+		objectMap["objectClass"] = "scConfigFileSyncTemplate";
+		objectMap["searchBase"] = searchBase;
+		objectMapList = add(objectMapList, objectMap);
+		// read in the scConfigFileTemplate objects
+		objectMap["objectClass"] = "scConfigFileTemplate";
+		objectMap["searchBase"] = searchBase;
+		objectMapList = add(objectMapList, objectMap);
+		if (!InitDialogTree2(objectMapList, false)) success = false;
+	}
+	else if (screenObjectClass == "scBranchServer") {
+		// read in the scHarddisk objects
+		objectMap["objectClass"] = "scHarddisk";
+		objectMap["searchBase"] = searchBase;
+		objectMapList = add(objectMapList, objectMap);
+		// read in the scNetworkcard objects
+		objectMap["objectClass"] = "scNetworkcard";
+		objectMap["searchBase"] = searchBase;
+		objectMapList = add(objectMapList, objectMap);
+		// read in the scService objects
+		objectMap["objectClass"] = "scService";
+		objectMap["searchBase"] = searchBase;
+		objectMapList = add(objectMapList, objectMap);
+		// read in the scHAService objects
+		objectMap["objectClass"] = "scHAService";
+		objectMap["searchBase"] = searchBase;
+		objectMapList = add(objectMapList, objectMap);
+		if (!InitDialogTree2(objectMapList, false)) success = false;
+	}
+	y2milestone("InitDialogTree - known_ldap_objects: %1", SleposSystemManager::known_ldap_objects);
+	y2milestone("InitDialogTree - InternalTree: %1", InternalTree);
+	y2milestone("InitDialogTree - screens: %1", screens);
+	SleposSystemManager::SettingsMap["screens"] = screens; // save the valid screens (dialogs) for reference on valid return codes in uifunctions.ycp
+	return success;
+}
+
+
+/**
+ * Returns a list to be used with the table widget(DialogTree.ycp), using the InternalTree data structure
+ * @return list<map>
+ */
+list<map> GetDisplayTree () {
+	list<map> DisplayTree = []; // Tree to display in the help text dialog
+	foreach( map element, InternalTree, {
+		DisplayTree = Wizard::AddTreeItem( DisplayTree, element["parent"]:"", element["title"]:"" , element["id"]:"" );
+	});
+	y2milestone("GetDisplayTree - DisplayTree: %1", DisplayTree);
+	y2milestone("GetDisplayTree - InternalTree: %1", InternalTree);
+	return DisplayTree;
+}
+
+
+/**
+* Display tree workflow and tree contents (widgets_handling) dialogs as one dialog
+* @return symbol
+*/
+symbol RunSystemManagerDialogs () {
+
+	SleposSystemManager::SettingsMap["current_screen"] = "@BranchLocations"; // Set the BranchLocations as the current screen by default
+
+	any ret = `redraw;
+	while (ret == `redraw) {
+
+		InitDialogTree();
+
+		y2debug("*******************************************************************");
+		y2debug("SleposDialogTree::ShowAndRun()");
+		y2debug("screens: %1", screens);
+		y2debug("widgets_handling: %1", widgets_handling);
+		y2debug("*******************************************************************");
+
+//		ret = SleposDialogTree::ShowAndRun ($[ // SLES9
+		ret = DialogTree::ShowAndRun ($[ // SLES10
+			"tree_creator"		: GetDisplayTree,
+//			"initial_screen"	: "eastbay@scLocation",
+			"initial_screen"	: SleposSystemManager::SettingsMap["current_screen"]:"",
+			"screens"		: screens,
+			"widget_descr"		: widgets_handling,
+			"back_button"		: Label::BackButton(),
+			"abort_button"		: Label::AbortButton(),
+			"next_button"		: Label::NextButton(),
+			"functions"		: functions,
+		]);
+
+		y2milestone("DialogTree::ShowAndRun returned: %1", ret);
+	}
+	return (symbol) ret;
+}
+
+
+/* EOF */
+}

@@ -1,0 +1,30 @@
+@HEADER-COMMENT@
+# neededforbuild yast2-devel-packages yast2-slepos-common yast2-country yast2-network yast2-installation
+
+@HEADER@
+Requires:	yast2 yast2-slepos-common POS_Server-Admin2
+
+BuildArchitectures:	noarch
+
+Summary:	SLEPOS System Manager
+
+%description
+-
+
+@PREP@
+
+@BUILD@
+
+@INSTALL@
+
+@CLEAN@
+
+%files
+%defattr(-,root,root)
+%dir @yncludedir@/slepos-system-manager
+@yncludedir@/slepos-system-manager/*
+@clientdir@/slepos-system-manager.ycp
+@moduledir@/SleposSystemManager.*
+@desktopdir@/slepos-system-manager.desktop
+%doc @docdir@
+@scrconfdir@/*.scr

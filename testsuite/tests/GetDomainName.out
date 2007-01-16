@@ -1,0 +1,40 @@
+Dump	*******************************************************
+Dump	TEST CASE #1
+Dump	SleposSystemManager::GetDomainName(nil)
+Return	
+Dump	*******************************************************
+Dump	TEST CASE #2
+Dump	SleposSystemManager::GetDomainName()
+Return	
+Dump	*******************************************************
+Dump	TEST CASE #3
+Dump	SleposSystemManager::GetDomainName(c=us)
+Return	us
+Dump	*******************************************************
+Dump	TEST CASE #4
+Dump	SleposSystemManager::GetDomainName(o=novell,c=us)
+Return	novell.us
+Dump	*******************************************************
+Dump	TEST CASE #5
+Dump	SleposSystemManager::GetDomainName(ou=ut,o=novell,c=us)
+Return	ut.novell.us
+Dump	*******************************************************
+Dump	TEST CASE #6
+Dump	SleposSystemManager::GetDomainName(ou=provo,ou=ut,o=novell,c=us)
+Return	provo.ut.novell.us
+Dump	*******************************************************
+Dump	TEST CASE #7
+Dump	SleposSystemManager::GetDomainName(cn=bld_H,ou=provo,ou=ut,o=novell,c=us)
+Return	bld_H.provo.ut.novell.us
+Dump	*******************************************************
+Dump	TEST CASE #8
+Dump	SleposSystemManager::GetDomainName(cn=bs-21,cn=server,cn=bld_H,ou=provo,ou=ut,o=novell,c=us)
+Return	bs-21.server.bld_H.provo.ut.novell.us
+Dump	*******************************************************
+Dump	TEST CASE #9
+Dump	SleposSystemManager::GetDomainName(cn=50.1,cn=bs-21,cn=server,cn=bld_H,ou=provo,ou=ut,o=novell,c=us)
+Return	50.1.bs-21.server.bld_H.provo.ut.novell.us
+Dump	*******************************************************
+Dump	TEST CASE #10
+Dump	SleposSystemManager::GetDomainName(cn=50.1)
+Return	50.1

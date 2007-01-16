@@ -1,0 +1,107 @@
+{
+
+// testedfiles: SleposSystemManger.ycp
+
+include "testsuite.ycp";
+TESTSUITE_INIT([], nil);
+
+import "SleposSystemManager";
+
+integer testNum = 0;
+
+map READ = $[];
+map WRITE = $[];
+map EXECUTE_0 = $[
+	"target" : $[
+		"bash_output" : $["exit":0, "stdout":"stdout messages", "stderr":"An error message!"]
+	]
+];
+
+map EXECUTE_1 = $[
+	"target" : $[
+		"bash_output" : $["exit":1, "stdout":"stdout messages", "stderr":"An error message!"]
+	]
+];
+
+
+// Test for nil param
+testNum = testNum + 1;
+DUMP("*******************************************************");
+DUMP(sformat("TEST CASE #%1", testNum));
+string DN = nil;
+DUMP(sformat("SleposSystemManager::GetDomainName(%1)", DN));
+TEST(``(SleposSystemManager::GetDomainName(DN)), [READ,WRITE,EXECUTE_0], nil);
+
+// Test for empty string param
+testNum = testNum + 1;
+DUMP("*******************************************************");
+DUMP(sformat("TEST CASE #%1", testNum));
+DN = "";
+DUMP(sformat("SleposSystemManager::GetDomainName(%1)", DN));
+TEST(``(SleposSystemManager::GetDomainName(DN)), [READ,WRITE,EXECUTE_0], nil);
+
+// Test c=us
+testNum = testNum + 1;
+DUMP("*******************************************************");
+DUMP(sformat("TEST CASE #%1", testNum));
+DN = "c=us";
+DUMP(sformat("SleposSystemManager::GetDomainName(%1)", DN));
+TEST(``(SleposSystemManager::GetDomainName(DN)), [READ,WRITE,EXECUTE_0], nil);
+
+// Test o=novell,c=us
+testNum = testNum + 1;
+DUMP("*******************************************************");
+DUMP(sformat("TEST CASE #%1", testNum));
+DN = "o=novell,c=us";
+DUMP(sformat("SleposSystemManager::GetDomainName(%1)", DN));
+TEST(``(SleposSystemManager::GetDomainName(DN)), [READ,WRITE,EXECUTE_0], nil);
+
+// Test ou=ut,o=novell,c=us
+testNum = testNum + 1;
+DUMP("*******************************************************");
+DUMP(sformat("TEST CASE #%1", testNum));
+DN = "ou=ut,o=novell,c=us";
+DUMP(sformat("SleposSystemManager::GetDomainName(%1)", DN));
+TEST(``(SleposSystemManager::GetDomainName(DN)), [READ,WRITE,EXECUTE_0], nil);
+
+// Test ou=provo,ou=ut,o=novell,c=us
+testNum = testNum + 1;
+DUMP("*******************************************************");
+DUMP(sformat("TEST CASE #%1", testNum));
+DN = "ou=provo,ou=ut,o=novell,c=us";
+DUMP(sformat("SleposSystemManager::GetDomainName(%1)", DN));
+TEST(``(SleposSystemManager::GetDomainName(DN)), [READ,WRITE,EXECUTE_0], nil);
+
+// Test cn=bld_H,ou=provo,ou=provo,ou=ut,o=novell,c=us
+testNum = testNum + 1;
+DUMP("*******************************************************");
+DUMP(sformat("TEST CASE #%1", testNum));
+DN = "cn=bld_H,ou=provo,ou=ut,o=novell,c=us";
+DUMP(sformat("SleposSystemManager::GetDomainName(%1)", DN));
+TEST(``(SleposSystemManager::GetDomainName(DN)), [READ,WRITE,EXECUTE_0], nil);
+
+// Test cn=bs-21,cn=server,cn=bld_H,ou=provo,ou=provo,ou=ut,o=novell,c=us
+testNum = testNum + 1;
+DUMP("*******************************************************");
+DUMP(sformat("TEST CASE #%1", testNum));
+DN = "cn=bs-21,cn=server,cn=bld_H,ou=provo,ou=ut,o=novell,c=us";
+DUMP(sformat("SleposSystemManager::GetDomainName(%1)", DN));
+TEST(``(SleposSystemManager::GetDomainName(DN)), [READ,WRITE,EXECUTE_0], nil);
+
+// Test cn=50.1,cn=bs-21,cn=server,cn=bld_H,ou=provo,ou=provo,ou=ut,o=novell,c=us
+testNum = testNum + 1;
+DUMP("*******************************************************");
+DUMP(sformat("TEST CASE #%1", testNum));
+DN = "cn=50.1,cn=bs-21,cn=server,cn=bld_H,ou=provo,ou=ut,o=novell,c=us";
+DUMP(sformat("SleposSystemManager::GetDomainName(%1)", DN));
+TEST(``(SleposSystemManager::GetDomainName(DN)), [READ,WRITE,EXECUTE_0], nil);
+
+// Test cn=50.1
+testNum = testNum + 1;
+DUMP("*******************************************************");
+DUMP(sformat("TEST CASE #%1", testNum));
+DN = "cn=50.1";
+DUMP(sformat("SleposSystemManager::GetDomainName(%1)", DN));
+TEST(``(SleposSystemManager::GetDomainName(DN)), [READ,WRITE,EXECUTE_0], nil);
+
+}

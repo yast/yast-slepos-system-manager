@@ -1,0 +1,80 @@
+/**
+ * File:	clients/slepos-system-manager.ycp
+ * Package:	Configuration of slepos-system-manager
+ * Summary:	Main file
+ * Authors:	Michael G. Fritch <mgfritch@novell.com>
+ *
+ * $Id: slepos-system-manager.ycp,v 1.9 2004/02/05 15:16:57 msvec Exp $
+ *
+ * Main file for slepos-system-manager configuration. Uses all other files.
+ */
+
+{
+
+/***
+ * <h3>Configuration of slepos-system-manager</h3>
+ */
+
+textdomain "slepos-system-manager";
+
+/* The main () */
+y2milestone ("----------------------------------------");
+y2milestone ("SleposSystemManager module started");
+
+import "Progress";
+import "Report";
+import "Summary";
+import "Mode";
+
+import "CommandLine";
+include "slepos-system-manager/wizards.ycp";
+
+Mode::SetTest("test");  // SLES10 only
+
+
+map cmdline_description = $[
+
+// FIXME: must return an error warning the user to the use the posAdmin.pl command line tools instead of YaST command line.
+
+    "id" 	: "slepos-system-manager",
+    /* Command line help text for the Xslepos-system-manager module */
+    "help"	: _("Configuration of slepos-system-manager"),
+    "guihandler"        : SleposSystemManagerSequence,
+    "initialize"        : SleposSystemManager::Read,
+    //"finish"            : SleposSystemManager::Write,
+    "actions"           : $[
+	// FIXME TODO: fill the functionality description here
+    ],
+    "options"		: $[
+	// FIXME TODO: fill the option descriptions here
+    ],
+    "mapping"		: $[
+	// FIXME TODO: fill the mappings of actions and options here
+    ]
+];
+
+/* is this proposal or not? */
+boolean propose = false;
+list args = WFM::Args();
+if(size(args) > 0) {
+    if(is(WFM::Args(0), path) && WFM::Args(0) == .propose) {
+        y2milestone("Using PROPOSE mode");
+        propose = true;
+    }
+}
+
+/* main ui function */
+any ret = nil;
+
+if(propose) ret = SleposSystemManagerAutoSequence();
+else ret = CommandLine::Run(cmdline_description);
+y2debug("ret=%1", ret);
+
+/* Finish */
+y2milestone("SleposSystemManager module finished");
+y2milestone("----------------------------------------");
+
+return ret;
+
+/* EOF */
+}

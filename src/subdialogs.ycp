@@ -1,0 +1,2336 @@
+/**
+ * File:        slepos-system-manager/subdialogs.ycp
+ * Package:     Configuration YaST2 slepos-system-manager
+ * Summary:     Configuration screens
+ * Authors:     Michael G. Fritch <mgfritch@novell.com>
+ *
+ * $Id: subdialogs.ycp 21781 2005-02-21 15:29:52Z locilka $
+ *
+ * Configuration dialogs divided into smaller logic groups.
+ */
+{
+
+textdomain "slepos-system-manager";
+
+import "Label";
+import "SleposSystemManager";
+import "SleposValidators";
+import "IP";
+
+include "slepos-system-manager/complex.ycp";
+include "slepos-system-manager/helps.ycp";
+
+// GLOBAL UI CONFIGURATION
+term all_popup_definition = `opt(`decorated,`centered);
+
+// TERM FUNCTIONS, WHOLE DIALOGS OR FRAMES
+
+/**
+ * Returns a detailed dialog for a given heading and body
+ * @param body
+ * @return term
+ */
+term DetailedSettingsDialog (string heading, term body) {
+	term dialog = `Frame (
+		heading,
+		`VBox (
+			`VSpacing(1),
+			body,
+			`VSpacing(1),
+			`HBox (
+				`PushButton(`id("ok"), Label::OKButton()),
+				`PushButton(`id("cancel"), Label::CancelButton())
+			)
+		)
+	);
+	
+	return dialog;
+}
+
+
+/**
+ * Returns a detailed dialog for a given heading and body
+ * @param body
+ * @return term
+ */
+term TableSelectDialog (string heading, term body) {
+	term dialog = `Frame (
+		heading,
+		`VBox (
+			//`VSpacing(1),
+			`VWeight( 90, body),
+			//`VSpacing(1),
+			`VWeight( 10 ,`HBox (
+				`HSpacing(20),
+				`PushButton(`id("ok"), Label::OKButton()),
+				`PushButton(`id("cancel"), Label::CancelButton()),
+				`HSpacing(20)
+			))
+		)
+	);
+	
+	return dialog;
+}
+
+
+/**
+ * General function for handling a popup to select a
+ * Image Reference Object (scPosImage) LDAP object
+ * @param dn string of the item to defalut the table selection
+ * @return string selected DN
+ */
+string HandlePopupSelectscPosImage (string current_dn) {
+	// listing all known Image Reference objects (scPosImage)
+	list <list <list <string> > > image_objects = SleposSystemManager::GetObjectsFromLDAP("scPosImage", nil, true);
+	list <term> table_items = [];
+	foreach (list <list <string> > object, image_objects, {
+		string objectDN = SleposSystemManager::getObjectValue("DN", object);
+		string scImageName = SleposSystemManager::getObjectValue("scImageName", object);
+		string scPosImageVersion = SleposSystemManager::getObjectValue("scPosImageVersion", object);
+		// convert the DN into a domain name and then tokenize it using the '.' char
+		list<string> tmplist = splitstring(SleposSystemManager::GetDomainName(objectDN), ".");
+		string DistContainer = tmplist[1]:"";
+		string RefContainer = tmplist[2]:"";
+		table_items = add (table_items, `item( `id(objectDN),
+			scImageName,
+			scPosImageVersion,
+			DistContainer,
+			RefContainer
+		));
+	});
+
+	// Generate the pop-up dialog definition
+	string caption = _("Select an Image Reference Object");
+        term body = `VBox(
+		`Table(`id("table_objects"),
+				`header (
+					// table header items
+					_("Image Name"),
+					_("Image Version"),
+					_("Distribution Container"),
+					_("Reference Object Container")
+				), table_items
+	  	)
+	);
+
+	// opening popup
+	UI::OpenDialog(all_popup_definition, TableSelectDialog(caption, body));
+
+	// Set the selected item in the table
+	UI::ChangeWidget(`id ("table_objects"), `CurrentItem, current_dn);
+
+	string current_item = "";
+	string ret = "again";
+	do {
+		ret = (string) UI::UserInput();
+		if (ret == "ok") {
+			current_item = (string) UI::QueryWidget(`id ("table_objects"), `CurrentItem);
+			if (current_item == nil || current_item == "") {
+				Popup::Error(_("No Image Reference Object Selected.\nPlease, select an Image Reference Object"));
+				ret = "again";
+			}
+		}
+	} while (ret == "again");
+
+	UI::CloseDialog();
+
+	y2milestone("HandlePopupSelectscPosImage returned: %1", current_item);
+	return current_item;
+}
+
+
+
+/**
+ * General function for handling a popup to select a
+ * Image Reference Object (scPosImage) LDAP object
+ * @param dn string of the item to defalut the table selection
+ * @return string selected DN
+ */
+string HandlePopupSelectscCashRegister (string current_dn) {
+	// listing all known Hardware Reference objects (scCashRegister)
+	list <list <list <string> > > image_objects = SleposSystemManager::GetObjectsFromLDAP("scCashRegister", nil, true);
+	list <term> table_items = [];
+	foreach (list <list <string> > object, image_objects, {
+		string objectDN = SleposSystemManager::getObjectValue("DN", object);
+		string cn = SleposSystemManager::getObjectValue("cn", object);
+		string scCashRegisterName = SleposSystemManager::getObjectValue("scCashRegisterName", object);
+		// convert the DN into a domain name and then tokenize it using the '.' char
+		list<string> tmplist = splitstring(SleposSystemManager::GetDomainName(objectDN), ".");
+		string RefContainer = tmplist[1]:"";
+		table_items = add (table_items, `item( `id(objectDN),
+			cn,
+			scCashRegisterName,
+			RefContainer
+		));
+	});
+
+	// Generate the pop-up dialog definition
+	string caption = _("Select a Hardware Reference Object");
+        term body = `VBox(
+		`Table(`id("table_objects"),
+				`header (
+					// table header items
+					_("Hardware Name"),
+					_("Model Type"),
+					_("Reference Object Container")
+				), table_items
+	  	)
+	);
+
+	// opening popup
+	UI::OpenDialog(all_popup_definition, TableSelectDialog(caption, body));
+
+	// Set the selected item in the table
+	UI::ChangeWidget(`id ("table_objects"), `CurrentItem, current_dn);
+
+	string current_item = "";
+	string ret = "again";
+	do {
+		ret = (string) UI::UserInput();
+		if (ret == "ok") {
+			current_item = (string) UI::QueryWidget(`id ("table_objects"), `CurrentItem);
+			if (current_item == nil || current_item == "") {
+				Popup::Error(_("No Hardware Reference Object Selected.\nPlease, select a Hardware Reference Object"));
+				ret = "again";
+			}
+		}
+	} while (ret == "again");
+
+	UI::CloseDialog();
+
+	y2milestone("HandlePopupSelectscCashRegister returned: %1", current_item);
+	return current_item;
+}
+
+
+
+
+/**
+ * Returns dialog with a table summary for any LDAP object with add, remove, modify buttons.
+ * @return term
+ */
+term ObjectTableDialog (string caption) {
+	term dialog = `Frame (
+		caption,
+		`VBox (
+			`Table (
+				`id("table_objects"),
+				`header (
+					// table header items
+					_("Name"),
+					_("Type")
+				), []
+			),
+			`HBox (
+				// push buttons
+				`PushButton(`id("add_object"), _("&Add")),
+				`PushButton(`id("modify_object"), _("&Modify")),
+				`PushButton(`id("remove_object"), _("Remo&ve"))
+			)
+		)
+	);
+
+	return dialog;
+}
+
+
+/**
+ * Displays a dialog with radio buttons to select an LDAP object from a list of specified objects
+ * @param list<string> list of objectClasses
+ * @return dialog result or if `next the objectClass of the selected object
+ */
+any SelectObjectTypeDialog(list<string> objectClassList) {
+	if (objectClassList == nil || size(objectClassList) < 1) return nil;
+
+	string caption = _("Select Type");
+	
+	term radioButtons = `VBox();
+
+	foreach(string objectClass, objectClassList, {
+		if (objectClass == "scConfigFileSyncTemplate")
+			radioButtons = add(radioButtons, `Left(`RadioButton(`id(objectClass), _("&File-Based Configuration Template"))));
+		else if (objectClass == "scConfigFileTemplate")
+			radioButtons = add(radioButtons, `Left(`RadioButton(`id(objectClass), _("&LDAP-Based Configuration Template"))));
+		else if (objectClass == "scHarddisk")
+			radioButtons = add(radioButtons, `Left(`RadioButton(`id(objectClass), _("&Hard Disk"))));
+		else if (objectClass == "scRamDisk")
+			radioButtons = add(radioButtons, `Left(`RadioButton(`id(objectClass), _("&Ram Disk"))));
+		else if (objectClass == "scNetworkcard") 
+			radioButtons = add(radioButtons, `Left(`RadioButton(`id(objectClass), _("N&etwork Card"))));
+		else if (objectClass == "scService")
+			radioButtons = add(radioButtons, `Left(`RadioButton(`id(objectClass), _("Network &Service"))));
+		else if (objectClass == "scHAService")
+			radioButtons = add(radioButtons, `Left(`RadioButton(`id(objectClass), _("High &Availability Service"))));
+		else y2error("Unknown objectClass type: %1\nCannot create a radio button for this objectClass!", objectClass);
+	});
+
+	term contents = `HVSquash(`Frame( caption, `VBox(
+		`RadioButtonGroup(`id(`rb), radioButtons)
+	)));
+
+	Wizard::SetContentsButtons(caption, contents, HelpForDialog("select_object_type"),
+		Label::BackButton(), Label::NextButton());
+
+	any ret = nil;
+	while(true) {
+
+		ret = UI::UserInput();
+	
+		/* abort? */
+		if(ret == `abort || ret == `cancel || ret == `back) {
+			if(ReallyAbort()) break;
+			else continue;
+		}
+		else if(ret == `next) {
+			ret = UI::QueryWidget(`id(`rb), `CurrentButton);
+			if (ret == nil) {
+				Popup::Error(_("A type must be selected."));  // FIXME: need a more descriptive error message.
+				continue;
+			}
+			break;
+		}
+		else {
+			y2error("unexpected retcode: %1", ret);
+			continue;
+		}
+	}
+
+	return ret;
+}
+
+
+
+
+
+/**
+ * Returns dialog with a table summary of the branch locations (scLocation) with add, remove, modify buttons.
+ * @return term
+ */
+term scLocationTableDialog () {
+	term dialog = `Frame (
+		_("Branch Locations"),
+		`VBox (
+			`Table (
+				`id("table_scLocation"),
+				`header (
+					// table header items
+					_("Branch Name"),
+					_("Location"),
+					_("Network Number"),
+					_("Netmask")
+				), []
+			),
+			`HBox (
+				// push buttons
+				`PushButton(`id("add_scLocation"), _("&Add")),
+				`PushButton(`id("modify_scLocation"), _("&Modify")),
+				`PushButton(`id("remove_scLocation"), _("Remo&ve"))
+			)
+		)
+	);
+
+	return dialog;
+}
+
+
+/**
+ * Displays a dialog to add/modify all LDAP object values required for a location object (scLocation, organizationalUnit)
+ * @param string object_key (DN)
+ * @return dialog result
+ */
+any scLocationDetailsDialog1(string object_key) {
+	boolean newObject = false;
+	if (object_key == nil || object_key == "") newObject = true;
+
+	if ( SleposSystemManager::temp_ldap_object == nil || SleposSystemManager::temp_ldap_object == [] ) 
+		SleposSystemManager::temp_ldap_object = SleposSystemManager::getObjectFromList(object_key, SleposSystemManager::known_ldap_objects); // grab the location object from the list of LDAP objects	
+
+	string caption = sformat(_("%1 Branch Location"), newObject ? _("Create") : _("Modify"));
+	
+	// Must attributes
+	string cn = SleposSystemManager::getObjectValue("cn", SleposSystemManager::temp_ldap_object);
+	string ipNetworkNumber = SleposSystemManager::getObjectValue("ipNetworkNumber", SleposSystemManager::temp_ldap_object);
+	string ipNetmaskNumber = SleposSystemManager::getObjectValue("ipNetmaskNumber", SleposSystemManager::temp_ldap_object);
+	string scDhcpRange = SleposSystemManager::getObjectValue("scDhcpRange", SleposSystemManager::temp_ldap_object);
+	string scDhcpFixedRange = SleposSystemManager::getObjectValue("scDhcpFixedRange", SleposSystemManager::temp_ldap_object);
+	string scDefaultGw = SleposSystemManager::getObjectValue("scDefaultGw", SleposSystemManager::temp_ldap_object);
+	string scDynamicIp = SleposSystemManager::getObjectValue("scDynamicIp", SleposSystemManager::temp_ldap_object);
+
+	// Generate the DNS domain name of the branch location using the LDAP object DN
+	string dn = SleposSystemManager::getObjectValue("DN", SleposSystemManager::temp_ldap_object);
+	string location = SleposSystemManager::GetDomainName(dn);
+
+	term contents = `HVSquash(`Frame( caption, `VBox(
+		`Left(`TextEntry(`id(`cn), _("Location Name"), cn)), //FIXME: should we grab the first part of the location (up to first period) to use as the cn and not ask for this value?
+		`Left(`TextEntry(`id(`location), _("DNS Location"), location)), // FIXME: should this be called 'location domain name' instead???
+		`Left(`TextEntry(`id(`ipNetworkNumber), _("Network Number"), ipNetworkNumber)),
+		`Left(`TextEntry(`id(`ipNetmaskNumber), _("Netmask"), ipNetmaskNumber)),
+		`Left(`TextEntry(`id(`scDhcpRange), _("DHCP Range"), scDhcpRange)),
+		`Left(`TextEntry(`id(`scDhcpFixedRange), _("DHCP Fixed Range"), scDhcpFixedRange)),
+		`Left(`TextEntry(`id(`scDefaultGw), _("Default Gateway"), scDefaultGw)),
+		`Left(`ComboBox(`id(`scDynamicIp), _("Use Dynamic IP"), ["TRUE", "FALSE"]))
+	)));
+
+	Wizard::SetContentsButtons(caption, contents, HelpForDialog("scLocation_details1"),
+		Label::BackButton(), Label::NextButton());
+
+	// Make sure the combo box defaults to the appropriate value
+	UI::ChangeWidget(`id(`scDynamicIp), `Value, toupper(scDynamicIp));
+
+	any ret = nil;
+	while(true) {
+
+		ret = UI::UserInput();
+	
+		/* abort? */
+		if(ret == `abort || ret == `cancel || ret == `back) {
+			if(ReallyAbort()) break;
+			else continue;
+		}
+		else if(ret == `next) {
+			cn = (string)UI::QueryWidget(`id(`cn), `Value);
+			location = (string)UI::QueryWidget(`id(`location), `Value);
+			ipNetworkNumber = (string)UI::QueryWidget(`id(`ipNetworkNumber), `Value);
+			ipNetmaskNumber = (string)UI::QueryWidget(`id(`ipNetmaskNumber), `Value);
+			scDhcpRange = (string)UI::QueryWidget(`id(`scDhcpRange), `Value);
+			scDhcpFixedRange = (string)UI::QueryWidget(`id(`scDhcpFixedRange), `Value);
+			scDefaultGw = (string)UI::QueryWidget(`id(`scDefaultGw), `Value);
+			scDynamicIp = toupper((string)UI::QueryWidget(`id(`scDynamicIp), `Value));
+			
+			if (cn == nil || cn == "") {
+				Popup::Error(_("Location name required."));
+				continue;
+			}
+			if (!SleposValidators::ValidateDNSorIPMsg(location, _("DNS location"))) continue; // FIXME: should this be called 'location domain name' instead???
+			if (!SleposValidators::ValidateIPMsg(ipNetworkNumber, _("Network Number"))) continue;
+			if (!SleposValidators::ValidateIPMsg(ipNetmaskNumber, _("Netmask"))) continue;
+			if (scDhcpRange == nil || scDhcpRange == "") {
+				Popup::Error(_("DHCP range required."));
+				continue;
+			}
+			if (scDhcpFixedRange == nil || scDhcpFixedRange == "") {
+				Popup::Error(_("DHCP fixed range required."));
+				continue;
+			}
+			if (!SleposValidators::ValidateIPMsg(scDefaultGw, _("Default Gateway"))) continue;
+			if (scDynamicIp == nil || scDynamicIp == "") {
+				Popup::Error(_("Dynamic IP required."));
+				continue;
+			}
+	
+			//modify the current location object
+			y2milestone("OLD SleposSystemManager::temp_ldap_object=%1", SleposSystemManager::temp_ldap_object);
+			SleposSystemManager::temp_ldap_object = SleposSystemManager::setObjectValues("cn", cn, SleposSystemManager::temp_ldap_object);
+			SleposSystemManager::temp_ldap_object = SleposSystemManager::setObjectValues("location", location, SleposSystemManager::temp_ldap_object);
+			SleposSystemManager::temp_ldap_object = SleposSystemManager::setObjectValues("ipNetworkNumber", ipNetworkNumber, SleposSystemManager::temp_ldap_object);
+			SleposSystemManager::temp_ldap_object = SleposSystemManager::setObjectValues("ipNetmaskNumber", ipNetmaskNumber, SleposSystemManager::temp_ldap_object);
+			SleposSystemManager::temp_ldap_object = SleposSystemManager::setObjectValues("scDhcpRange", scDhcpRange, SleposSystemManager::temp_ldap_object);
+			SleposSystemManager::temp_ldap_object = SleposSystemManager::setObjectValues("scDhcpFixedRange", scDhcpFixedRange, SleposSystemManager::temp_ldap_object);
+			SleposSystemManager::temp_ldap_object = SleposSystemManager::setObjectValues("scDefaultGw", scDefaultGw, SleposSystemManager::temp_ldap_object);
+			SleposSystemManager::temp_ldap_object = SleposSystemManager::setObjectValues("scDynamicIp", scDynamicIp, SleposSystemManager::temp_ldap_object);
+			y2milestone("SleposSystemManager::temp_ldap_settings=%1", SleposSystemManager::temp_ldap_object);
+
+			break;
+		}
+		else {
+			y2error("unexpected retcode: %1", ret);
+			continue;
+		}
+	}
+
+	return ret;
+}
+
+
+
+/**
+ * Displays a dialog to add/modify all LDAP object values required for a location object (scLocation, organizationalUnit)
+ * @param string object_key (DN)
+ * @return dialog result
+ */
+any scLocationDetailsDialog2(string object_key) {
+	boolean newObject = false;
+	if (object_key == nil || object_key == "") newObject = true;
+
+	string caption = sformat(_("%1 Branch Location"), newObject ? _("Create") : _("Modify"));
+	
+	// May attributes
+	string scLdapDn = SleposSystemManager::getObjectValue("scLdapDn", SleposSystemManager::temp_ldap_object);
+	string scDnsDn = SleposSystemManager::getObjectValue("scDnsDn", SleposSystemManager::temp_ldap_object);
+	string scWorkstationBaseName = SleposSystemManager::getObjectValue("scWorkstationBaseName", SleposSystemManager::temp_ldap_object);
+	string scPrinterBaseName = SleposSystemManager::getObjectValue("scPrinterBaseName", SleposSystemManager::temp_ldap_object);
+	string scEnumerationMask = SleposSystemManager::getObjectValue("scEnumerationMask", SleposSystemManager::temp_ldap_object);
+	string associatedDomain = SleposSystemManager::getObjectValue("associatedDomain", SleposSystemManager::temp_ldap_object);
+
+	// set defaults for values that do not exist.
+	if (scWorkstationBaseName == nil || scWorkstationBaseName == "") scWorkstationBaseName = "CR";
+	if (scEnumerationMask == nil || scEnumerationMask == "") scEnumerationMask = "000";
+
+	term contents = `HVSquash(`Frame( caption, `VBox(
+		`Left(`TextEntry(`id(`scLdapDn), _("scLdapDn (optional)"), scLdapDn)), //FIXME: what to call this???
+		`Left(`TextEntry(`id(`scDnsDn), _("scDnsDn (optional)"), scDnsDn)), // FIXME: what to call this???
+		`Left(`TextEntry(`id(`scWorkstationBaseName), _("Workstation Base Name (optional)"), scWorkstationBaseName)),
+		`Left(`TextEntry(`id(`scPrinterBaseName), _("Printer Base Name (optional)"), scPrinterBaseName)),
+		`Left(`TextEntry(`id(`scEnumerationMask), _("Enumeration Mask (optional)"), scEnumerationMask)),
+		`Left(`TextEntry(`id(`associatedDomain), _("Associated Domain (optional)"), associatedDomain))
+	)));
+
+	Wizard::SetContentsButtons(caption, contents, HelpForDialog("scLocation_details2"),
+		Label::BackButton(), Label::NextButton());
+
+	any ret = nil;
+	while(true) {
+
+		ret = UI::UserInput();
+	
+		/* abort? */
+		if(ret == `abort || ret == `cancel ){
+			if(ReallyAbort()) break;
+			else continue;
+		}
+		else if(ret == `back) {
+			break;
+		}
+		else if(ret == `next) {
+			scLdapDn = (string)UI::QueryWidget(`id(`scLdapDn), `Value);
+			scDnsDn = (string)UI::QueryWidget(`id(`scDnsDn), `Value);
+			scWorkstationBaseName = (string)UI::QueryWidget(`id(`scWorkstationBaseName), `Value);
+			scPrinterBaseName = (string)UI::QueryWidget(`id(`scPrinterBaseName), `Value);
+			scEnumerationMask = (string)UI::QueryWidget(`id(`scEnumerationMask), `Value);
+			associatedDomain = (string)UI::QueryWidget(`id(`associatedDomain), `Value);
+			
+			//modify the current location object
+			y2milestone("OLD SleposSystemManager::temp_ldap_object=%1", SleposSystemManager::temp_ldap_object);
+			SleposSystemManager::temp_ldap_object = SleposSystemManager::setObjectValues("scLdapDn", scLdapDn, SleposSystemManager::temp_ldap_object);
+			SleposSystemManager::temp_ldap_object = SleposSystemManager::setObjectValues("scDnsDn", scDnsDn, SleposSystemManager::temp_ldap_object);
+
+
+			//FIXME: see bugzilla #145695
+			SleposSystemManager::temp_ldap_object = SleposSystemManager::removeObjectValues("scWorkstationBaseName", SleposSystemManager::temp_ldap_object);
+			SleposSystemManager::temp_ldap_object = SleposSystemManager::setObjectValues("scWorkstationBasename", scWorkstationBaseName, SleposSystemManager::temp_ldap_object);
+			//FIXME: see bugzilla #145695
+
+			SleposSystemManager::temp_ldap_object = SleposSystemManager::setObjectValues("scPrinterBaseName", scPrinterBaseName, SleposSystemManager::temp_ldap_object);
+			SleposSystemManager::temp_ldap_object = SleposSystemManager::setObjectValues("scEnumerationMask", scEnumerationMask, SleposSystemManager::temp_ldap_object);
+			SleposSystemManager::temp_ldap_object = SleposSystemManager::setObjectValues("associatedDomain", associatedDomain, SleposSystemManager::temp_ldap_object);
+	
+			y2milestone("SleposSystemManager::temp_ldap_object=%1", SleposSystemManager::temp_ldap_object);
+
+			break;
+		}
+		else {
+			y2error("unexpected retcode: %1", ret);
+			continue;
+		}
+	}
+
+	return ret;
+}
+
+
+
+/**
+ * Returns dialog with a table summary of the branch servers with add, remove, modify buttons.
+ * @return term
+ */
+term scBranchServer_scWorkstation_TableDialog () {
+	term dialog = `VBox (
+		`Frame (
+			_("Branch Servers"),
+			`VBox (
+				`Table (
+					`id("table_scBranchServer"),
+					`header (
+						// table header items
+						_("Server Name"),
+						_("DNS Name")
+					), []
+				),
+				`HBox (
+					// push buttons
+					`PushButton(`id("add_scBranchServer"), _("&Add")),
+					`PushButton(`id("modify_scBranchServer"), _("&Modify")),
+					`PushButton(`id("remove_scBranchServer"), _("Remo&ve"))
+				)
+			)
+		),
+		`VSpacing(1),
+		`Frame (
+			_("Workstations"),
+			`VBox (
+				`Table (
+					`id("table_scWorkstation"),
+					`header (
+						// table header items
+						_("Workstation Name"),
+						_("DNS Name"),
+						_("MAC Address"),
+						_("IP Address")
+					), []
+				),
+				`HBox (
+					// push buttons
+					`PushButton(`id("add_scWorkstation"), _("&Add")),
+					`PushButton(`id("modify_scWorkstation"), _("&Modify")),
+					`PushButton(`id("remove_scWorkstation"), _("Remo&ve"))
+				)
+			)
+		)
+	);
+	return dialog;
+}
+
+
+
+
+
+
+/**
+ * Displays a dialog to add/modify all LDAP object values required for a branch server object (scBranchServer, scServerContainer)
+ * @param string object_key (DN)
+ * @return dialog result
+ */
+any scBranchServerDetailsDialog(string object_key) {
+
+	boolean newObject = false;
+	if (object_key == nil || object_key == "") newObject = true;
+
+	if ( SleposSystemManager::temp_ldap_object == nil || SleposSystemManager::temp_ldap_object == [] ) 
+		SleposSystemManager::temp_ldap_object = SleposSystemManager::getObjectFromList(object_key, SleposSystemManager::known_ldap_objects); // grab the object from the list of LDAP objects	
+
+	
+	string caption = sformat(_("%1 Branch Server"), newObject ? _("Create") : _("Modify"));
+
+	// Must attributes
+	string cn = SleposSystemManager::getObjectValue("cn", SleposSystemManager::temp_ldap_object);
+	// May objects
+	string scRefServerDn = SleposSystemManager::getObjectValue("scRefServerDn", SleposSystemManager::temp_ldap_object);
+//	string scPubKey = SleposSystemManager::getObjectValue("scPubKey", SleposSystemManager::temp_ldap_object); // FIXME: Temporary bug fix by removing scPubKey from the UI. See bugzilla #146385
+
+	term contents = `HVSquash(`Frame( caption, `VBox(
+		`Left(`TextEntry(`id(`cn), _("Branch Server Name"), cn)),
+		`Left(`TextEntry(`id(`scRefServerDn), _("scRefServerDn (optional)"), scRefServerDn))
+//		`Left(`TextEntry(`id(`scPubKey), _("Public Key (optional)"), scPubKey)) // FIXME: Temporary bug fix by removing scPubKey from the UI. See bugzilla #146385
+	)));
+
+	Wizard::SetContentsButtons(caption, contents, HelpForDialog("scBranchServer_details"),
+		Label::BackButton(), Label::NextButton());
+
+	any ret = nil;
+	while(true) {
+
+		ret = UI::UserInput();
+	
+		/* abort? */
+		if(ret == `abort || ret == `cancel || ret == `back) {
+			if(ReallyAbort()) break;
+			else continue;
+		}
+		else if(ret == `next) {
+			cn = (string)UI::QueryWidget(`id(`cn), `Value);
+			scRefServerDn = (string)UI::QueryWidget(`id(`scRefServerDn), `Value);
+//			scPubKey = (string)UI::QueryWidget(`id(`scPubKey), `Value); // FIXME: Temporary bug fix by removing scPubKey from the UI. See bugzilla #146385
+	
+			if (cn == nil || cn == "") {
+				Popup::Error(_("Branch server name required."));
+				continue;
+			}
+
+			//modify the current branch server object
+			y2milestone("OLD SleposSystemManager::temp_ldap_object=%1", SleposSystemManager::temp_ldap_object);
+			SleposSystemManager::temp_ldap_object = SleposSystemManager::setObjectValues("cn", cn, SleposSystemManager::temp_ldap_object);
+			SleposSystemManager::temp_ldap_object = SleposSystemManager::setObjectValues("scRefServerDn", scRefServerDn, SleposSystemManager::temp_ldap_object);
+//			SleposSystemManager::temp_ldap_object = SleposSystemManager::setObjectValues("scPubKey", scPubKey, SleposSystemManager::temp_ldap_object); // FIXME: Temporary bug fix by removing scPubKey from the UI. See bugzilla #146385
+			y2milestone("NEW SleposSystemManager::temp_ldap_object=%1", SleposSystemManager::temp_ldap_object);
+
+			break;
+		}
+		else {
+			y2error("unexpected retcode: %1", ret);
+			continue;
+		}
+	}
+
+	return ret;
+}
+
+
+
+/**
+ * Displays a dialog to add/modify all LDAP object values required for a workstation object (scWorkstation)
+ * @param string object_key (DN)
+ * @return dialog result
+ */
+any scWorkstationDetailsDialog1(string object_key) {
+
+	boolean newObject = false;
+	if (object_key == nil || object_key == "") newObject = true;
+
+	if ( SleposSystemManager::temp_ldap_object == nil || SleposSystemManager::temp_ldap_object == [] ) 
+		SleposSystemManager::temp_ldap_object = SleposSystemManager::getObjectFromList(object_key, SleposSystemManager::known_ldap_objects); // grab the object from the list of LDAP objects	
+
+	string caption = sformat(_("%1 Workstation"), newObject ? _("Create") : _("Modify"));
+
+	// Must attributes
+	string cn = SleposSystemManager::getObjectValue("cn", SleposSystemManager::temp_ldap_object); // FIXME: should read the scLocation object to get the workstationBaseName and scEnumerationMask. These could be used to default this value if it is empty!
+	string macAddress = SleposSystemManager::getObjectValue("macAddress", SleposSystemManager::temp_ldap_object);
+	string ipHostNumber = SleposSystemManager::getObjectValue("ipHostNumber", SleposSystemManager::temp_ldap_object);
+
+	term contents = `HVSquash(`Frame( caption, `VBox(
+		`TextEntry(`id(`cn), _("Host Name"), cn),
+		`TextEntry(`id(`macAddress), _("MAC Address"), macAddress),
+		`TextEntry(`id(`ipHostNumber), _("IP Address"), ipHostNumber)
+	)));
+
+	Wizard::SetContentsButtons(caption, contents, HelpForDialog("scWorkstation_details1"),
+		Label::BackButton(), Label::NextButton());
+
+	any ret = nil;
+	while(true) {
+
+		ret = UI::UserInput();
+	
+		/* abort? */
+		if(ret == `abort || ret == `cancel || ret == `back) {
+			if(ReallyAbort()) break;
+			else continue;
+		}
+		else if(ret == `next) {
+			cn = (string)UI::QueryWidget(`id(`cn), `Value);
+			macAddress = (string)UI::QueryWidget(`id(`macAddress), `Value);
+			ipHostNumber = (string)UI::QueryWidget(`id(`ipHostNumber), `Value);
+	
+			if (cn == nil || cn == "") {
+				Popup::Error(_("Workstation host name required."));
+				continue;
+			}
+			if (macAddress == nil || macAddress == "") { // FIXME: is there a good way to validate the macAddress???
+				Popup::Error(_("MAC Address required."));
+				continue;
+			}
+			if (!SleposValidators::ValidateIPMsg(ipHostNumber, _("IP Address"))) continue;
+
+			//modify the current branch server object
+			y2milestone("OLD SleposSystemManager::temp_ldap_object=%1", SleposSystemManager::temp_ldap_object);
+			SleposSystemManager::temp_ldap_object = SleposSystemManager::setObjectValues("cn", cn, SleposSystemManager::temp_ldap_object);
+			SleposSystemManager::temp_ldap_object = SleposSystemManager::setObjectValues("macAddress", macAddress, SleposSystemManager::temp_ldap_object);
+			SleposSystemManager::temp_ldap_object = SleposSystemManager::setObjectValues("ipHostNumber", ipHostNumber, SleposSystemManager::temp_ldap_object);
+			y2milestone("NEW SleposSystemManager::temp_ldap_object=%1", SleposSystemManager::temp_ldap_object);
+
+			break;
+		}
+		else {
+			y2error("unexpected retcode: %1", ret);
+			continue;
+		}
+	}
+
+	return ret;
+}
+
+
+/**
+ * Displays a dialog to add/modify all LDAP object values required for a workstation object (scWorkstation)
+ * @param string object_key (DN)
+ * @return dialog result
+ */
+any scWorkstationDetailsDialog2(string object_key) {
+
+	boolean newObject = false;
+	if (object_key == nil || object_key == "") newObject = true;
+
+	string caption = sformat(_("%1 Workstation"), newObject ? _("Create") : _("Modify"));
+
+	// May objects
+	string scSerialNumber = SleposSystemManager::getObjectValue("scSerialNumber", SleposSystemManager::temp_ldap_object);
+	string scRefPcDn = SleposSystemManager::getObjectValue("scRefPcDn", SleposSystemManager::temp_ldap_object);
+	string scPosImageDn = SleposSystemManager::getObjectValue("scPosImageDn", SleposSystemManager::temp_ldap_object);
+	string scPosImageVersion = SleposSystemManager::getObjectValue("scPosImageVersion", SleposSystemManager::temp_ldap_object);
+	string scPOSRegisterBiosVersion = SleposSystemManager::getObjectValue("scPOSRegisterBiosVersion", SleposSystemManager::temp_ldap_object);
+	string scConfigFileDn = SleposSystemManager::getObjectValue("scConfigFileDn", SleposSystemManager::temp_ldap_object);
+	string scStandardPrinterDn = SleposSystemManager::getObjectValue("scStandardPrinterDn", SleposSystemManager::temp_ldap_object);
+
+	term contents = `HVSquash(`Frame( caption, `VBox(
+		`TextEntry(`id(`scSerialNumber), _("Serial Number (optional)"), scSerialNumber),
+		`HBox(
+			`TextEntry(`id(`scRefPcDn), _("Hardware Reference Object (optional)"), scRefPcDn),
+			`HSpacing(1),
+			`VBox(
+				`Label(" "), // NOTE: adds space to the top of the browse button so that it will line up correctly with the text entry
+				`PushButton(`id(`scRefPcDn_browse), Label::BrowseButton())
+			)
+		),
+		`HBox(
+			`VBox(
+				`TextEntry(`id(`scPosImageDn), _("Default Image (optional)"), scPosImageDn),
+				`TextEntry(`id(`scPosImageVersion), _("Image Version (optional)"), scPosImageVersion)
+			),
+			`HSpacing(1),
+			`VBox(
+				`Label(" "), // NOTE: adds space to the top of the browse button so that it will line up correctly with the text entry
+				`PushButton(`id(`scPosImageDn_browse), Label::BrowseButton())
+			)
+		),
+		`TextEntry(`id(`scPOSRegisterBiosVersion), _("Register Bios Version (optional)"), scPOSRegisterBiosVersion),
+		`TextEntry(`id(`scConfigFileDn), _("Config File DN (optional)"), scConfigFileDn),
+		`TextEntry(`id(`scStandardPrinterDn), _("Standard Printer DN (optional)"), scStandardPrinterDn)
+	)));
+
+	Wizard::SetContentsButtons(caption, contents, HelpForDialog("scWorkstation_details2"),
+		Label::BackButton(), Label::NextButton());
+
+	// NOTE: do not let the user modify this values. The browse button should be used to select the appropriate values.
+	UI::ChangeWidget(`id(`scRefPcDn), `Enabled, false);
+	UI::ChangeWidget(`id(`scPosImageDn), `Enabled, false);
+	UI::ChangeWidget(`id(`scPosImageVersion), `Enabled, false);
+
+	// Set values for the widgets with browse buttons
+	list <list <list <string> > > tmp_objects = SleposSystemManager::GetObjectsFromLDAP("scPosImage", nil, true);
+	list <list <string> > tmp_object = SleposSystemManager::getObjectFromList(scPosImageDn, tmp_objects);
+	UI::ChangeWidget(`id(`scPosImageDn), `Value, SleposSystemManager::getObjectValue("scImageName", tmp_object));
+	UI::ChangeWidget(`id(`scPosImageVersion), `Value, SleposSystemManager::getObjectValue("scPosImageVersion", tmp_object));
+	tmp_objects = SleposSystemManager::GetObjectsFromLDAP("scCashRegister", nil, true);
+	tmp_object = SleposSystemManager::getObjectFromList(scRefPcDn, tmp_objects);
+	UI::ChangeWidget(`id(`scRefPcDn), `Value, SleposSystemManager::getObjectValue("cn", tmp_object));
+
+	any ret = nil;
+	while(true) {
+
+		ret = UI::UserInput();
+	
+		/* abort? */
+		if(ret == `abort || ret == `cancel) {
+			if(ReallyAbort()) break;
+			else continue;
+		}
+		else if (ret == `back) {
+			break;
+		}
+		else if(ret == `next) {
+			scSerialNumber = (string)UI::QueryWidget(`id(`scSerialNumber), `Value);
+			//scRefPcDn = (string)UI::QueryWidget(`id(`scRefPcDn), `Value); // NOTE: don't query this value... it is set by the browse button
+			//scPosImageDn = (string)UI::QueryWidget(`id(`scPosImageDn), `Value); // NOTE: don't query this value... it is set by the browse button
+			scPosImageVersion = (string)UI::QueryWidget(`id(`scPosImageVersion), `Value);
+			scPOSRegisterBiosVersion = (string)UI::QueryWidget(`id(`scPOSRegisterBiosVersion), `Value);
+			scConfigFileDn = (string)UI::QueryWidget(`id(`scConfigFileDn), `Value);
+			scStandardPrinterDn = (string)UI::QueryWidget(`id(`scStandardPrinterDn), `Value);
+	
+			//modify the current branch server object
+			y2debug("OLD SleposSystemManager::temp_ldap_object=%1", SleposSystemManager::temp_ldap_object);
+			SleposSystemManager::temp_ldap_object = SleposSystemManager::setObjectValues("scSerialNumber", scSerialNumber, SleposSystemManager::temp_ldap_object);
+			SleposSystemManager::temp_ldap_object = SleposSystemManager::setObjectValues("scRefPcDn", scRefPcDn, SleposSystemManager::temp_ldap_object);
+			SleposSystemManager::temp_ldap_object = SleposSystemManager::setObjectValues("scPosImageDn", scPosImageDn, SleposSystemManager::temp_ldap_object);
+			SleposSystemManager::temp_ldap_object = SleposSystemManager::setObjectValues("scPosImageVersion", scPosImageVersion, SleposSystemManager::temp_ldap_object);
+			SleposSystemManager::temp_ldap_object = SleposSystemManager::setObjectValues("scPOSRegisterBiosVersion", scPOSRegisterBiosVersion, SleposSystemManager::temp_ldap_object);
+			SleposSystemManager::temp_ldap_object = SleposSystemManager::setObjectValues("scConfigFileDn", scConfigFileDn, SleposSystemManager::temp_ldap_object);
+			SleposSystemManager::temp_ldap_object = SleposSystemManager::setObjectValues("scStandardPrinterDn", scStandardPrinterDn, SleposSystemManager::temp_ldap_object);
+			y2debug("NEW SleposSystemManager::temp_ldap_object=%1", SleposSystemManager::temp_ldap_object);
+
+			break;
+		}
+		else if (ret == `scPosImageDn_browse) { // browse button pressed
+			string image_dn = HandlePopupSelectscPosImage(scPosImageDn);
+			if (image_dn != nil && image_dn != "") {
+				// must convert the image_dn into a value that does not look like a dn .... we shouldn't expose dn values to the UI.
+				tmp_objects = SleposSystemManager::GetObjectsFromLDAP("scPosImage", nil, true);
+				tmp_object = SleposSystemManager::getObjectFromList(image_dn, tmp_objects);
+				UI::ChangeWidget(`id(`scPosImageDn), `Value, SleposSystemManager::getObjectValue("scImageName", tmp_object));
+				UI::ChangeWidget(`id(`scPosImageVersion), `Value, SleposSystemManager::getObjectValue("scPosImageVersion", tmp_object));
+				scPosImageDn = image_dn; // NOTE: set this value now, rather than using QueryWidget later
+			}
+		}
+		else if (ret == `scRefPcDn_browse) {
+			string hardware_dn = HandlePopupSelectscCashRegister(scRefPcDn);
+			if (hardware_dn != nil && hardware_dn != "") {
+				// must convert the hardware_dn into a value that does not look like a dn .... we shouldn't expose dn values to the UI.
+				tmp_objects = SleposSystemManager::GetObjectsFromLDAP("scCashRegister", nil, true);
+				tmp_object = SleposSystemManager::getObjectFromList(hardware_dn, tmp_objects);
+				UI::ChangeWidget(`id(`scRefPcDn), `Value, SleposSystemManager::getObjectValue("cn", tmp_object));
+				scRefPcDn = hardware_dn; // NOTE: set this value now, rather than using QueryWidget later
+			}
+		}
+		else {
+			y2error("unexpected retcode: %1", ret);
+			continue;
+		}
+	}
+
+	return ret;
+}
+
+
+/**
+ * Displays a dialog to add/modify all LDAP object values required for a workstation object (scWorkstation)
+ * @param string object_key (DN)
+ * @return dialog result
+ */
+any scWorkstationDetailsDialog3(string object_key) {
+
+	boolean newObject = false;
+	if (object_key == nil || object_key == "") newObject = true;
+
+	string caption = sformat(_("%1 Workstation"), newObject ? _("Create") : _("Modify"));
+
+	// May objects
+	string userPassword = SleposSystemManager::getObjectValue("userPassword", SleposSystemManager::temp_ldap_object);
+	string scStandardPrinter = SleposSystemManager::getObjectValue("scStandardPrinter", SleposSystemManager::temp_ldap_object);
+	string scPOSGroupDn = SleposSystemManager::getObjectValue("scPOSGroupDn", SleposSystemManager::temp_ldap_object);
+	string scDiskJournal = SleposSystemManager::getObjectValue("scDiskJournal", SleposSystemManager::temp_ldap_object);
+	string scConfigUpdate = SleposSystemManager::getObjectValue("scConfigUpdate", SleposSystemManager::temp_ldap_object);
+	string scNotifiedImage = SleposSystemManager::getObjectValue("scNotifiedImage", SleposSystemManager::temp_ldap_object);
+
+
+	term contents = `HVSquash(`Frame( caption, `VBox(
+		`Left(`Password(`id(`userPassword), _("User Password (optional)"), userPassword)),
+		`Left(`TextEntry(`id(`scStandardPrinter), _("Standard Printer (optional)"), scStandardPrinter)),
+		`Left(`TextEntry(`id(`scPOSGroupDn), _("POS Group DN (optional)"), scPOSGroupDn)),
+		`Left(`TextEntry(`id(`scDiskJournal), _("Disk Journal (optional)"), scDiskJournal)),
+		`Left(`TextEntry(`id(`scConfigUpdate), _("Config Update (optional)"), scConfigUpdate)),
+		`Left(`TextEntry(`id(`scNotifiedImage), _("Notified Image (optional)"), scNotifiedImage))
+	)));
+
+	Wizard::SetContentsButtons(caption, contents, HelpForDialog("scWorkstation_details3"),
+		Label::BackButton(), Label::NextButton());
+
+	any ret = nil;
+	while(true) {
+
+		ret = UI::UserInput();
+	
+		/* abort? */
+		if(ret == `abort || ret == `cancel) {
+			if(ReallyAbort()) break;
+			else continue;
+		}
+		else if (ret == `back) {
+			break;
+		}
+		else if(ret == `next) {
+			userPassword = (string)UI::QueryWidget(`id(`userPassword), `Value);
+			scStandardPrinter = (string)UI::QueryWidget(`id(`scStandardPrinter), `Value);
+			scPOSGroupDn = (string)UI::QueryWidget(`id(`scPOSGroupDn), `Value);
+			scDiskJournal = (string)UI::QueryWidget(`id(`scDiskJournal), `Value);
+			scConfigUpdate = (string)UI::QueryWidget(`id(`scConfigUpdate), `Value);
+			scNotifiedImage = (string)UI::QueryWidget(`id(`scNotifiedImage), `Value);
+	
+			//modify the current branch server object
+			y2debug("OLD SleposSystemManager::temp_ldap_object=%1", SleposSystemManager::temp_ldap_object);
+			SleposSystemManager::temp_ldap_object = SleposSystemManager::setObjectValues("userPassword", userPassword, SleposSystemManager::temp_ldap_object);
+			SleposSystemManager::temp_ldap_object = SleposSystemManager::setObjectValues("scStandardPrinter", scStandardPrinter, SleposSystemManager::temp_ldap_object);
+			SleposSystemManager::temp_ldap_object = SleposSystemManager::setObjectValues("scPOSGroupDn", scPOSGroupDn, SleposSystemManager::temp_ldap_object);
+			SleposSystemManager::temp_ldap_object = SleposSystemManager::setObjectValues("scDiskJournal", scDiskJournal, SleposSystemManager::temp_ldap_object);
+			SleposSystemManager::temp_ldap_object = SleposSystemManager::setObjectValues("scConfigUpdate", scConfigUpdate, SleposSystemManager::temp_ldap_object);
+			SleposSystemManager::temp_ldap_object = SleposSystemManager::setObjectValues("scNotifiedImage", scNotifiedImage, SleposSystemManager::temp_ldap_object);
+			y2debug("NEW SleposSystemManager::temp_ldap_object=%1", SleposSystemManager::temp_ldap_object);
+
+			break;
+		}
+		else {
+			y2error("unexpected retcode: %1", ret);
+			continue;
+		}
+	}
+
+	return ret;
+}
+
+
+/**
+ * Returns dialog with a table summary of Referenece object containers (scRefObjectContainer) with add, remove, modify buttons.
+ * @return term
+ */
+term scRefObjectContainerTableDialog () {
+	term dialog = `Frame (
+		_("Reference Object Containers"),
+		`VBox (
+			`Table (
+				`id("table_scRefObjectContainer"),
+				`header (
+					// table header items
+					_("Container Name")
+				), []
+			),
+			`HBox (
+				// push buttons
+				`PushButton(`id("add_scRefObjectContainer"), _("&Add")),
+				`PushButton(`id("modify_scRefObjectContainer"), _("&Modify")),
+				`PushButton(`id("remove_scRefObjectContainer"), _("Remo&ve"))
+			)
+		)
+	);
+
+	return dialog;
+}
+
+/**
+ * Displays a dialog to add/modify all LDAP object values required for a reference object container (scRefObjectContainer)
+ * @param string object_key (DN)
+ * @return dialog result
+ */
+any scRefObjectContainerDetailsDialog(string object_key) {
+
+	boolean newObject = false;
+	if (object_key == nil || object_key == "") newObject = true;
+
+	if ( SleposSystemManager::temp_ldap_object == nil || SleposSystemManager::temp_ldap_object == [] ) 
+		SleposSystemManager::temp_ldap_object = SleposSystemManager::getObjectFromList(object_key, SleposSystemManager::known_ldap_objects); // grab the object from the list of LDAP objects	
+
+	string caption = sformat(_("%1 Reference Object Container"), newObject ? _("Create") : _("Modify"));
+
+	// Must attributes
+	string cn = SleposSystemManager::getObjectValue("cn", SleposSystemManager::temp_ldap_object);
+	
+	term contents = `HVSquash(`Frame( caption, `VBox(
+		`Left(`TextEntry(`id(`cn), _("Container Name"), cn))
+	)));
+
+	Wizard::SetContentsButtons(caption, contents, HelpForDialog("scRefObjectContainer_details"),
+		Label::BackButton(), Label::NextButton());
+
+	any ret = nil;
+	while(true) {
+
+		ret = UI::UserInput();
+	
+		/* abort? */
+		if(ret == `abort || ret == `cancel || ret == `back) {
+			if(ReallyAbort()) break;
+			else continue;
+		}
+		else if(ret == `next) {
+			cn = (string)UI::QueryWidget(`id(`cn), `Value);
+			
+			if (cn == nil || cn == "") {
+				Popup::Error(_("Container name required."));
+				continue;
+			}
+
+			//modify the current branch server object
+			y2milestone("OLD SleposSystemManager::temp_ldap_object=%1", SleposSystemManager::temp_ldap_object);
+			SleposSystemManager::temp_ldap_object = SleposSystemManager::setObjectValues("cn", cn, SleposSystemManager::temp_ldap_object);
+			y2milestone("NEW SleposSystemManager::temp_ldap_object=%1", SleposSystemManager::temp_ldap_object);
+
+			break;
+		}
+		else {
+			y2error("unexpected retcode: %1", ret);
+			continue;
+		}
+	}
+
+	return ret;
+}
+
+
+/**
+ * Returns dialog with a table summary of distribution containers with add, remove, modify buttons.
+ * @return term
+ */
+term scDistributionContainer_scCashRegister_TableDialog () {
+	term dialog = `VBox(
+		`Frame (
+			_("Distribution Containers"),
+			`VBox (
+				`Table (
+					`id("table_scDistributionContainer"),
+					`header (
+						// table header items
+						_("Container Name"),
+						_("Kernel Version"),
+						_("Kernel Name"),
+						_("Initrd Name"),
+						_("Kernel Match")
+					), []
+				),
+				`HBox (
+					// push buttons
+					`PushButton(`id("add_scDistributionContainer"), _("&Add")),
+					`PushButton(`id("modify_scDistributionContainer"), _("&Modify")),
+					`PushButton(`id("remove_scDistributionContainer"), _("Remo&ve"))
+				)
+			)
+		),
+		`VSpacing(1),
+		`Frame (
+			_("Hardware Reference Objects"),
+			`VBox (
+				`Table (
+					`id("table_scCashRegister"),
+					`header (
+						// table header items
+						_("Name"),  // cn
+						_("Model Type"), // scCashRegisterName
+						_("Default Image"), // scPosImageDn
+						_("Use Disk Journal")
+					), []
+				),
+				`HBox (
+					// push buttons
+					`PushButton(`id("add_scCashRegister"), _("&Add")),
+					`PushButton(`id("modify_scCashRegister"), _("&Modify")),
+					`PushButton(`id("remove_scCashRegister"), _("Remo&ve"))
+				)
+			)
+		)
+	);
+	return dialog;
+}
+
+
+/**
+ * Displays a dialog to add/modify all LDAP object values required for a distribution container (scDistributionContainer)
+ * @param string object_key (DN)
+ * @return dialog result
+ */
+any scDistributionContainerDetailsDialog(string object_key) {
+
+	boolean newObject = false;
+	if (object_key == nil || object_key == "") newObject = true;
+
+	if ( SleposSystemManager::temp_ldap_object == nil || SleposSystemManager::temp_ldap_object == [] ) 
+		SleposSystemManager::temp_ldap_object = SleposSystemManager::getObjectFromList(object_key, SleposSystemManager::known_ldap_objects); // grab the object from the list of LDAP objects	
+
+	string caption = sformat(_("%1 Distribution Container"), newObject ? _("Create") : _("Modify"));
+
+	// Must attributes
+	string cn = SleposSystemManager::getObjectValue("cn", SleposSystemManager::temp_ldap_object);
+	string scKernelName = SleposSystemManager::getObjectValue("scKernelName", SleposSystemManager::temp_ldap_object);
+	string scInitrdName = SleposSystemManager::getObjectValue("scInitrdName", SleposSystemManager::temp_ldap_object);
+	string scKernelVersion = SleposSystemManager::getObjectValue("scKernelVersion", SleposSystemManager::temp_ldap_object);
+	string scKernelMatch = SleposSystemManager::getObjectValue("scKernelMatch", SleposSystemManager::temp_ldap_object);
+	// May attribuites
+	string scKernelExpression = SleposSystemManager::getObjectValue("scKernelExpression", SleposSystemManager::temp_ldap_object);
+
+	term contents = `HVSquash(`Frame( caption, `VBox(
+		`Left(`TextEntry(`id(`cn), _("Container Name"), cn)),
+		`Left(`TextEntry(`id(`scKernelName), _("Kernel Name"), scKernelName)),
+		`Left(`TextEntry(`id(`scInitrdName), _("Initrd Name"), scInitrdName)),
+		`Left(`TextEntry(`id(`scKernelVersion), _("Kernel Version"), scKernelVersion)),
+		`Left(`TextEntry(`id(`scKernelMatch), _("Kernel Match"), scKernelMatch)), // FIXME: is there a finite list that we can use to display this value in a ComboBox
+		`Left(`TextEntry(`id(`scKernelExpression), _("Kernel Expression (optional)"), scKernelExpression)) // FIXME: is there a finite list that we can use to display this value in a ComboBox
+	)));
+
+	Wizard::SetContentsButtons(caption, contents, HelpForDialog("scDistributionContainer_details"),
+		Label::BackButton(), Label::NextButton());
+
+	any ret = nil;
+	while(true) {
+
+		ret = UI::UserInput();
+	
+		/* abort? */
+		if(ret == `abort || ret == `cancel || ret == `back) {
+			if(ReallyAbort()) break;
+			else continue;
+		}
+		else if(ret == `next) {
+			cn = (string)UI::QueryWidget(`id(`cn), `Value);
+			scKernelName = (string)UI::QueryWidget(`id(`scKernelName), `Value);
+			scInitrdName = (string)UI::QueryWidget(`id(`scInitrdName), `Value);
+			scKernelVersion = (string)UI::QueryWidget(`id(`scKernelVersion), `Value);
+			scKernelMatch = (string)UI::QueryWidget(`id(`scKernelMatch), `Value);
+			scKernelExpression = (string)UI::QueryWidget(`id(`scKernelExpression), `Value);
+
+			if (cn == nil || cn == "") {
+				Popup::Error(_("Container name required."));
+				continue;
+			}
+			if (scKernelName == nil || scKernelName == "") {
+				Popup::Error(_("Kernel name required."));
+				continue;
+			}
+			if (scInitrdName == nil || scInitrdName == "") {
+				Popup::Error(_("Initrd name required."));
+				continue;
+			}
+			if (scKernelVersion == nil || scKernelVersion == "") {
+				Popup::Error(_("Kernel version required."));
+				continue;
+			}
+			if (scKernelMatch == nil || scKernelMatch == "") {
+				Popup::Error(_("Kernel match required."));
+				continue;
+			}
+
+			//modify the current branch server object
+			y2milestone("OLD SleposSystemManager::temp_ldap_object=%1", SleposSystemManager::temp_ldap_object);
+			SleposSystemManager::temp_ldap_object = SleposSystemManager::setObjectValues("cn", cn, SleposSystemManager::temp_ldap_object);
+			SleposSystemManager::temp_ldap_object = SleposSystemManager::setObjectValues("scKernelName", scKernelName, SleposSystemManager::temp_ldap_object);
+			SleposSystemManager::temp_ldap_object = SleposSystemManager::setObjectValues("scInitrdName", scInitrdName, SleposSystemManager::temp_ldap_object);
+			SleposSystemManager::temp_ldap_object = SleposSystemManager::setObjectValues("scKernelVersion", scKernelVersion, SleposSystemManager::temp_ldap_object);
+			SleposSystemManager::temp_ldap_object = SleposSystemManager::setObjectValues("scKernelMatch", scKernelMatch, SleposSystemManager::temp_ldap_object);
+			SleposSystemManager::temp_ldap_object = SleposSystemManager::setObjectValues("scKernelExpression", scKernelExpression, SleposSystemManager::temp_ldap_object);
+			y2milestone("NEW SleposSystemManager::temp_ldap_object=%1", SleposSystemManager::temp_ldap_object);
+
+			break;
+		}
+		else {
+			y2error("unexpected retcode: %1", ret);
+			continue;
+		}
+	}
+
+	return ret;
+}
+
+
+/**
+ * Displays a dialog to add/modify all LDAP object values required for a hardware reference object (scCashRegister)
+ * @param string object_key (DN)
+ * @return dialog result
+ */
+any scCashRegisterDetailsDialog(string object_key) {
+
+	boolean newObject = false;
+	if (object_key == nil || object_key == "") newObject = true;
+
+	if ( SleposSystemManager::temp_ldap_object == nil || SleposSystemManager::temp_ldap_object == [] ) 
+		SleposSystemManager::temp_ldap_object = SleposSystemManager::getObjectFromList(object_key, SleposSystemManager::known_ldap_objects); // grab the object from the list of LDAP objects	
+
+	string caption = sformat(_("%1 Hardware Referance Object"), newObject ? _("Create") : _("Modify"));
+
+	// Must attributes
+	string cn = SleposSystemManager::getObjectValue("cn", SleposSystemManager::temp_ldap_object);
+	string scCashRegisterName = SleposSystemManager::getObjectValue("scCashRegisterName", SleposSystemManager::temp_ldap_object);
+	// May attributes
+	string scPosImageDn = SleposSystemManager::getObjectValue("scPosImageDn", SleposSystemManager::temp_ldap_object);
+	string scDiskJournal = SleposSystemManager::getObjectValue("scDiskJournal", SleposSystemManager::temp_ldap_object);
+
+	if (scDiskJournal == nil || scDiskJournal == "") scDiskJournal = "FALSE";
+
+	term contents = `HVSquash(`Frame( caption, `VBox(
+		`TextEntry(`id(`cn), _("Name"), cn), // FIXME: how does this compare to the scCashRegisterName?
+		`TextEntry(`id(`scCashRegisterName), _("Model Type"), scCashRegisterName), // FIXME: how does this compare with the cn?
+		`HBox(
+			`TextEntry(`id(`scPosImageDn), _("Default Image (optional)"), scPosImageDn),
+			`HSpacing(1),
+			`VBox(
+				`Label(" "), // NOTE: adds space to the top of the browse button so that it will line up correctly with the text entry
+				`PushButton(`id(`scPosImageDn_browse), Label::BrowseButton())
+			)
+		),
+		`Left(`ComboBox(`id(`scDiskJournal), _("Use Disk Journal (optional)"), ["TRUE", "FALSE"]))
+	)));
+
+	Wizard::SetContentsButtons(caption, contents, HelpForDialog("scCashRegister_details"),
+		Label::BackButton(), Label::NextButton());
+
+	// NOTE: do not let the user modify this values. The browse button should be used to select the appropriate values.
+	UI::ChangeWidget(`id(`scPosImageDn), `Enabled, false);
+	
+        // Set values for the widgets with browse buttons
+	list <list <list <string> > > tmp_objects = SleposSystemManager::GetObjectsFromLDAP("scPosImage", nil, true);
+	list <list <string> > tmp_object = SleposSystemManager::getObjectFromList(scPosImageDn, tmp_objects);
+	UI::ChangeWidget(`id(`scPosImageDn), `Value, SleposSystemManager::getObjectValue("scImageName", tmp_object));
+
+	// Make sure the combo box defaults to the appropriate value
+	UI::ChangeWidget(`id(`scDiskJournal), `Value, toupper(scDiskJournal));
+
+	any ret = nil;
+	while(true) {
+
+		ret = UI::UserInput();
+	
+		/* abort? */
+		if(ret == `abort || ret == `cancel || ret == `back) {
+			if(ReallyAbort()) break;
+			else continue;
+		}
+		else if(ret == `next) {
+			cn = (string)UI::QueryWidget(`id(`cn), `Value);
+			scCashRegisterName = (string)UI::QueryWidget(`id(`scCashRegisterName), `Value);
+			//scPosImageDn = (string)UI::QueryWidget(`id(`scPosImageDn), `Value); // NOTE: don't query this value... it is set by the browse button
+			scDiskJournal = toupper((string)UI::QueryWidget(`id(`scDiskJournal), `Value));
+
+			if (cn == nil || cn == "") {
+				Popup::Error(_("Name required."));
+				continue;
+			}
+			if (scCashRegisterName == nil || scCashRegisterName == "") {
+				Popup::Error(_("Model Type required."));
+				continue;
+			}
+
+			//modify the current branch server object
+			y2milestone("OLD SleposSystemManager::temp_ldap_object=%1", SleposSystemManager::temp_ldap_object);
+			SleposSystemManager::temp_ldap_object = SleposSystemManager::setObjectValues("cn", cn, SleposSystemManager::temp_ldap_object);
+			SleposSystemManager::temp_ldap_object = SleposSystemManager::setObjectValues("scCashRegisterName", scCashRegisterName, SleposSystemManager::temp_ldap_object);
+			SleposSystemManager::temp_ldap_object = SleposSystemManager::setObjectValues("scPosImageDn", scPosImageDn, SleposSystemManager::temp_ldap_object);
+			SleposSystemManager::temp_ldap_object = SleposSystemManager::setObjectValues("scDiskJournal", scDiskJournal, SleposSystemManager::temp_ldap_object);
+			y2milestone("NEW SleposSystemManager::temp_ldap_object=%1", SleposSystemManager::temp_ldap_object);
+
+			break;
+		}
+		else if (ret == `scPosImageDn_browse) { // browse button pressed
+			string image_dn = HandlePopupSelectscPosImage(scPosImageDn);
+			if (image_dn != nil && image_dn != "") {
+				// must convert the image_dn into a value that does not look like a dn .... we shouldn't expose dn values to the UI.
+				tmp_objects = SleposSystemManager::GetObjectsFromLDAP("scPosImage", nil, true);
+				tmp_object = SleposSystemManager::getObjectFromList(image_dn, tmp_objects);
+				UI::ChangeWidget(`id(`scPosImageDn), `Value, SleposSystemManager::getObjectValue("scImageName", tmp_object));
+				scPosImageDn = image_dn; // NOTE: set this value now, rather than using QueryWidget later
+			}
+		}
+		else {
+			y2error("unexpected retcode: %1", ret);
+			continue;
+		}
+	}
+
+	return ret;
+}
+
+
+
+/**
+ * Returns dialog with a table summary of images with add, remove, modify buttons.
+ * @return term
+ */
+term scPosImageTableDialog () {
+	term dialog = `Frame (
+		_("Image Reference Objects"),
+		`VBox (
+			`Table (
+				`id("table_scPosImage"),
+				`header (
+					// table header items
+					_("Image Name"),
+					_("Image Version"),
+					_("Image File"),
+					_("Image Size"),
+					_("DHCP Remote Options"),
+					_("DHCP Local Options"),
+					_("Config File")
+				), []
+			),
+			`HBox (
+				// push buttons
+				`PushButton(`id("add_scPosImage"), _("&Add")),
+				`PushButton(`id("modify_scPosImage"), _("&Modify")),
+				`PushButton(`id("remove_scPosImage"), _("Remo&ve"))
+			)
+		)
+	);
+
+	return dialog;
+}
+
+
+/**
+ * Displays a dialog to add/modify all LDAP object values required for a image object (scPosImage)
+ * @param string object_key (DN)
+ * @return dialog result
+ */
+any scPosImageDetailsDialog1(string object_key) {
+
+	boolean newObject = false;
+	if (object_key == nil || object_key == "") newObject = true;
+
+	if ( SleposSystemManager::temp_ldap_object == nil || SleposSystemManager::temp_ldap_object == [] ) 
+		SleposSystemManager::temp_ldap_object = SleposSystemManager::getObjectFromList(object_key, SleposSystemManager::known_ldap_objects); // grab the object from the list of LDAP objects	
+
+	string caption = sformat(_("%1 Image Referance Object"), newObject ? _("Create") : _("Modify"));
+
+	// Must attributes
+	string scImageName = SleposSystemManager::getObjectValue("scImageName", SleposSystemManager::temp_ldap_object);
+	string scPosImageVersion = SleposSystemManager::getObjectValue("scPosImageVersion", SleposSystemManager::temp_ldap_object);
+	string scImageFile = SleposSystemManager::getObjectValue("scImageFile", SleposSystemManager::temp_ldap_object);
+	integer scBsize = tointeger(SleposSystemManager::getObjectValue("scBsize", SleposSystemManager::temp_ldap_object));
+
+	term contents = `HVSquash(`Frame( caption, `VBox(
+		`Left(`TextEntry(`id(`scImageName), _("Image Name"), scImageName)), // FIXME: Shouldn't we read this in from the Image.xml
+		`Left(`TextEntry(`id(`scPosImageVersion), _("Image Version"), scPosImageVersion)), // FIXME: Shouldn't we read this in from the Image.xml
+		`Left(`TextEntry(`id(`scImageFile), _("Image File"), scImageFile)), // FIXME: Browse button???
+		`Left(`IntField(`id(`scBsize), _("Image size"), 0, 2147483647, scBsize)) // FIXME: size in Bytes??? //FIXME: is 2147483648 valid for the max int size?? // FIXME: can this value be defaulted?
+	)));
+
+	Wizard::SetContentsButtons(caption, contents, HelpForDialog("scPosImage_details1"),
+		Label::BackButton(), Label::NextButton());
+
+	any ret = nil;
+	while(true) {
+
+		ret = UI::UserInput();
+	
+		/* abort? */
+		if(ret == `abort || ret == `cancel || ret == `back) {
+			if(ReallyAbort()) break;
+			else continue;
+		}
+		else if(ret == `next) {
+			scImageName = (string)UI::QueryWidget(`id(`scImageName), `Value);
+			scPosImageVersion = (string)UI::QueryWidget(`id(`scPosImageVersion), `Value);
+			scImageFile = (string)UI::QueryWidget(`id(`scImageFile), `Value);
+			scBsize = (integer)UI::QueryWidget(`id(`scBsize), `Value);
+
+			if (scImageName == nil || scImageName == "") {
+				Popup::Error(_("Image name required."));
+				continue;
+			}
+			if (scPosImageVersion == nil || scPosImageVersion == "") {
+				Popup::Error(_("Image version required."));
+				continue;
+			}
+			if (scImageFile == nil || scImageFile == "") {
+				Popup::Error(_("Image file required."));
+				continue;
+			}
+			
+			//modify the current branch server object
+			y2milestone("OLD SleposSystemManager::temp_ldap_object=%1", SleposSystemManager::temp_ldap_object);
+			SleposSystemManager::temp_ldap_object = SleposSystemManager::setObjectValues("cn", scImageName, SleposSystemManager::temp_ldap_object); //FIXME: is it acceptable to use the scImageName as the CN?
+			SleposSystemManager::temp_ldap_object = SleposSystemManager::setObjectValues("scImageName", scImageName, SleposSystemManager::temp_ldap_object);
+			SleposSystemManager::temp_ldap_object = SleposSystemManager::setObjectValues("scPosImageVersion", scPosImageVersion, SleposSystemManager::temp_ldap_object);
+			SleposSystemManager::temp_ldap_object = SleposSystemManager::setObjectValues("scImageFile", scImageFile, SleposSystemManager::temp_ldap_object);
+			SleposSystemManager::temp_ldap_object = SleposSystemManager::setObjectValues("scBsize", tostring(scBsize), SleposSystemManager::temp_ldap_object);
+			y2milestone("NEW SleposSystemManager::temp_ldap_object=%1", SleposSystemManager::temp_ldap_object);
+
+			break;
+		}
+		else {
+			y2error("unexpected retcode: %1", ret);
+			continue;
+		}
+	}
+
+	return ret;
+}
+
+
+
+/**
+ * Displays a dialog to add/modify all LDAP object values required for a image object (scPosImage)
+ * @param string object_key (DN)
+ * @return dialog result
+ */
+any scPosImageDetailsDialog2(string object_key) {
+
+	boolean newObject = false;
+	if (object_key == nil || object_key == "") newObject = true;
+
+	string caption = sformat(_("%1 Image Referance Object"), newObject ? _("Create") : _("Modify"));
+
+	// Must attributes
+	string scDhcpOptionsRemote = SleposSystemManager::getObjectValue("scDhcpOptionsRemote", SleposSystemManager::temp_ldap_object);
+	string scDhcpOptionsLocal = SleposSystemManager::getObjectValue("scDhcpOptionsLocal", SleposSystemManager::temp_ldap_object);
+	// May attributes
+	string scConfigFile = SleposSystemManager::getObjectValue("scConfigFile", SleposSystemManager::temp_ldap_object);
+
+	term contents = `HVSquash(`Frame( caption, `VBox(
+		`Left(`TextEntry(`id(`scDhcpOptionsRemote), _("DHCP Remote Options"), scDhcpOptionsRemote)), // FIXME: how many options are possible?  Can we give them a selection box?
+		`Left(`TextEntry(`id(`scDhcpOptionsLocal), _("DHCP Local Options"), scDhcpOptionsLocal)), // FIXME: how many options are possible?  Can we give them a selection box?
+		`Left(`TextEntry(`id(`scConfigFile), _("Config File (optional)"), scConfigFile)) //FIXME: should we add a browse button?  Is this local to the admin server, or inside of the image?
+	)));
+
+	Wizard::SetContentsButtons(caption, contents, HelpForDialog("scPosImage_details2"),
+		Label::BackButton(), Label::NextButton());
+
+	any ret = nil;
+	while(true) {
+
+		ret = UI::UserInput();
+	
+		/* abort? */
+		if(ret == `abort || ret == `cancel) {
+			if(ReallyAbort()) break;
+			else continue;
+		}
+		else if(ret == `back) {
+			break;
+		}
+		else if(ret == `next) {
+			scDhcpOptionsRemote = (string)UI::QueryWidget(`id(`scDhcpOptionsRemote), `Value);
+			scDhcpOptionsLocal = (string)UI::QueryWidget(`id(`scDhcpOptionsLocal), `Value);
+			scConfigFile = (string)UI::QueryWidget(`id(`scConfigFile), `Value);
+
+			if (scDhcpOptionsRemote == nil || scDhcpOptionsRemote == "") {
+				Popup::Error(_("DHCP remote option required."));
+				continue;
+			}
+			if (scDhcpOptionsLocal == nil || scDhcpOptionsLocal == "") {
+				Popup::Error(_("DHCP local option required."));
+				continue;
+			}
+
+			//modify the current branch server object
+			y2milestone("OLD SleposSystemManager::temp_ldap_object=%1", SleposSystemManager::temp_ldap_object);
+			SleposSystemManager::temp_ldap_object = SleposSystemManager::setObjectValues("scDhcpOptionsRemote", scDhcpOptionsRemote, SleposSystemManager::temp_ldap_object);
+			SleposSystemManager::temp_ldap_object = SleposSystemManager::setObjectValues("scDhcpOptionsLocal", scDhcpOptionsLocal, SleposSystemManager::temp_ldap_object);
+			SleposSystemManager::temp_ldap_object = SleposSystemManager::setObjectValues("scConfigFile", scConfigFile, SleposSystemManager::temp_ldap_object);
+			y2milestone("NEW SleposSystemManager::temp_ldap_object=%1", SleposSystemManager::temp_ldap_object);
+
+			break;
+		}
+		else {
+			y2error("unexpected retcode: %1", ret);
+			continue;
+		}
+	}
+
+	return ret;
+}
+
+
+
+/**
+ * Displays a dialog to add/modify all LDAP object values required for a harddisk object (scHarddisk)
+ * @param string object_key (DN)
+ * @return dialog result
+ */
+any scHarddiskDetailsDialog(string object_key) {
+
+	boolean newObject = false;
+	if (object_key == nil || object_key == "") newObject = true;
+
+	if ( SleposSystemManager::temp_ldap_object == nil || SleposSystemManager::temp_ldap_object == [] ) 
+		SleposSystemManager::temp_ldap_object = SleposSystemManager::getObjectFromList(object_key, SleposSystemManager::known_ldap_objects); // grab the object from the list of LDAP objects	
+
+	string caption = sformat(_("%1 Hard Disk"), newObject ? _("Create") : _("Modify"));
+
+	// Must attributes
+	string cn = SleposSystemManager::getObjectValue("cn", SleposSystemManager::temp_ldap_object);
+	string scDevice = SleposSystemManager::getObjectValue("scDevice", SleposSystemManager::temp_ldap_object);
+	integer scHdSize = tointeger(SleposSystemManager::getObjectValue("scHdSize", SleposSystemManager::temp_ldap_object));
+	string scPartitionsTable = SleposSystemManager::getObjectValue("scPartitionsTable", SleposSystemManager::temp_ldap_object);
+
+	term contents = `HVSquash(`Frame( caption, `VBox(
+		`Left(`TextEntry(`id(`scDevice), _("Device"), scDevice)),
+		`Left(`IntField(`id(`scHdSize), _("Hard Disk Size"), 0, 2147483647, scHdSize)), // FIXME: size in K, MB, GB??? //FIXME: is 2147483648 valid for the max int size?? // FIXME: is it too small for valid disk sizes?
+		`Left(`TextEntry(`id(`scPartitionsTable), _("Partitions Table"), scPartitionsTable))
+	)));
+
+	Wizard::SetContentsButtons(caption, contents, HelpForDialog("scHarddisk_details"),
+		Label::BackButton(), Label::NextButton());
+
+	any ret = nil;
+	while(true) {
+
+		ret = UI::UserInput();
+	
+		/* abort? */
+		if(ret == `abort || ret == `cancel || ret == `back) {
+			if(ReallyAbort()) break;
+			else continue;
+		}
+		else if(ret == `next) {
+			scDevice = (string)UI::QueryWidget(`id(`scDevice), `Value);
+			scHdSize = (integer)UI::QueryWidget(`id(`scHdSize), `Value);
+			scPartitionsTable = (string)UI::QueryWidget(`id(`scPartitionsTable), `Value);
+
+			if (scDevice == nil || scDevice == "") {
+				Popup::Error(_("Device required."));
+				continue;
+			}
+			if (scPartitionsTable == nil || scPartitionsTable == "") {
+				Popup::Error(_("Partition table required."));
+				continue;
+			}
+			
+			// figure out a cn value using the scDevice
+			cn = regexpsub(scDevice, "(.*)\/(.*)", "\\2");
+
+			//modify the current LDAP object
+			y2milestone("OLD SleposSystemManager::temp_ldap_object=%1", SleposSystemManager::temp_ldap_object);
+			SleposSystemManager::temp_ldap_object = SleposSystemManager::setObjectValues("cn", cn, SleposSystemManager::temp_ldap_object);
+			SleposSystemManager::temp_ldap_object = SleposSystemManager::setObjectValues("scDevice", scDevice, SleposSystemManager::temp_ldap_object);
+			SleposSystemManager::temp_ldap_object = SleposSystemManager::setObjectValues("scHdSize", tostring(scHdSize), SleposSystemManager::temp_ldap_object);
+			SleposSystemManager::temp_ldap_object = SleposSystemManager::setObjectValues("scPartitionsTable", scPartitionsTable, SleposSystemManager::temp_ldap_object);
+			y2milestone("NEW SleposSystemManager::temp_ldap_object=%1", SleposSystemManager::temp_ldap_object);
+
+			break;
+		}
+		else {
+			y2error("unexpected retcode: %1", ret);
+			continue;
+		}
+	}
+
+	return ret;
+}
+
+
+
+/**
+ * Displays a dialog to add/modify all LDAP object values required for a RAM disk object (scRamDisk)
+ * @param string object_key (DN)
+ * @return dialog result
+ */
+any scRamDiskDetailsDialog(string object_key) {
+
+	boolean newObject = false;
+	if (object_key == nil || object_key == "") newObject = true;
+
+	if ( SleposSystemManager::temp_ldap_object == nil || SleposSystemManager::temp_ldap_object == [] ) 
+		SleposSystemManager::temp_ldap_object = SleposSystemManager::getObjectFromList(object_key, SleposSystemManager::known_ldap_objects); // grab the object from the list of LDAP objects	
+
+	string caption = sformat(_("%1 RAM Disk"), newObject ? _("Create") : _("Modify"));
+
+	// Must attributes
+	string cn = SleposSystemManager::getObjectValue("cn", SleposSystemManager::temp_ldap_object);
+	string scDevice = SleposSystemManager::getObjectValue("scDevice", SleposSystemManager::temp_ldap_object);
+	
+	// set some defaults for values that do not exist.
+	if (scDevice == nil || scDevice == "") scDevice = "/dev/ram1";
+
+	term contents = `HVSquash(`Frame( caption, `VBox(
+		`Left(`TextEntry(`id(`scDevice), _("Device"), scDevice))
+	)));
+
+	Wizard::SetContentsButtons(caption, contents, HelpForDialog("scRamDisk_details"),
+		Label::BackButton(), Label::NextButton());
+
+	any ret = nil;
+	while(true) {
+
+		ret = UI::UserInput();
+	
+		/* abort? */
+		if(ret == `abort || ret == `cancel || ret == `back) {
+			if(ReallyAbort()) break;
+			else continue;
+		}
+		else if(ret == `next) {
+			scDevice = (string)UI::QueryWidget(`id(`scDevice), `Value);
+
+			if (scDevice == nil || scDevice == "") {
+				Popup::Error(_("Device required."));
+				continue;
+			}
+			else if (scDevice == "/dev/ram0") {
+				Popup::Error(_("The device /dev/ram0 should not be used\nsince it is used for the initial RAM disk.\n\nTry using /dev/ram1 instead.\n"));
+				continue;
+			}
+
+			// figure out a cn value using the scDevice
+			cn = regexpsub(scDevice, "(.*)\/(.*)", "\\2");
+
+			//modify the current LDAP object
+			y2milestone("OLD SleposSystemManager::temp_ldap_object=%1", SleposSystemManager::temp_ldap_object);
+			SleposSystemManager::temp_ldap_object = SleposSystemManager::setObjectValues("cn", cn, SleposSystemManager::temp_ldap_object);
+			SleposSystemManager::temp_ldap_object = SleposSystemManager::setObjectValues("scDevice", scDevice, SleposSystemManager::temp_ldap_object);
+			y2milestone("NEW SleposSystemManager::temp_ldap_object=%1", SleposSystemManager::temp_ldap_object);
+
+			break;
+		}
+		else {
+			y2error("unexpected retcode: %1", ret);
+			continue;
+		}
+	}
+
+	return ret;
+}
+
+
+/**
+ * Displays a dialog to add/modify all LDAP object values required for a network card object (scNetworkcard)
+ * @param string object_key (DN)
+ * @return dialog result
+ */
+any scNetworkcardDetailsDialog(string object_key) {
+
+	boolean newObject = false;
+	if (object_key == nil || object_key == "") newObject = true;
+
+	if ( SleposSystemManager::temp_ldap_object == nil || SleposSystemManager::temp_ldap_object == [] ) 
+		SleposSystemManager::temp_ldap_object = SleposSystemManager::getObjectFromList(object_key, SleposSystemManager::known_ldap_objects); // grab the object from the list of LDAP objects	
+
+	string caption = sformat(_("%1 Network Card"), newObject ? _("Create") : _("Modify"));
+
+	// Must attributes
+	string scDevice = SleposSystemManager::getObjectValue("scDevice", SleposSystemManager::temp_ldap_object);
+	string ipHostNumber = SleposSystemManager::getObjectValue("ipHostNumber", SleposSystemManager::temp_ldap_object);
+	// May attributes
+	string macAddress = SleposSystemManager::getObjectValue("macAddress", SleposSystemManager::temp_ldap_object);
+	string scModul = SleposSystemManager::getObjectValue("scModul", SleposSystemManager::temp_ldap_object);
+	string scModulOption = SleposSystemManager::getObjectValue("scModulOption", SleposSystemManager::temp_ldap_object);
+	string ipNetmaskNumber = SleposSystemManager::getObjectValue("ipNetmaskNumber", SleposSystemManager::temp_ldap_object);
+
+	term contents = `HVSquash(`Frame( caption, `VBox(
+		`Left(`TextEntry(`id(`scDevice), _("Device"), scDevice)),
+		`Left(`TextEntry(`id(`ipHostNumber), _("IP Address"), ipHostNumber)),
+		`Left(`TextEntry(`id(`macAddress), _("MAC Address (optional)"), macAddress)),
+		`Left(`TextEntry(`id(`scModul), _("scModul (optional)"), scModul)), // FIXME: what to call this?
+		`Left(`TextEntry(`id(`scModulOption), _("scModulOption (optional)"), scModulOption)), // FIXME: what to call this?
+		`Left(`TextEntry(`id(`ipNetmaskNumber), _("Netmask (optional)"), ipNetmaskNumber))
+	)));
+
+	Wizard::SetContentsButtons(caption, contents, HelpForDialog("scNetworkcard_details"),
+		Label::BackButton(), Label::NextButton());
+
+	any ret = nil;
+	while(true) {
+
+		ret = UI::UserInput();
+	
+		/* abort? */
+		if(ret == `abort || ret == `cancel || ret == `back) {
+			if(ReallyAbort()) break;
+			else continue;
+		}
+		else if(ret == `next) {
+			scDevice = (string)UI::QueryWidget(`id(`scDevice), `Value);
+			ipHostNumber = (string)UI::QueryWidget(`id(`ipHostNumber), `Value);
+			macAddress = (string)UI::QueryWidget(`id(`macAddress), `Value);
+			scModul = (string)UI::QueryWidget(`id(`scModul), `Value);
+			scModulOption = (string)UI::QueryWidget(`id(`scModulOption), `Value);
+			ipNetmaskNumber = (string)UI::QueryWidget(`id(`ipNetmaskNumber), `Value);
+
+			if (scDevice == nil || scDevice == "") {
+				Popup::Error(_("Device required."));
+				continue;
+			}
+			if (!SleposValidators::ValidateIPMsg(ipHostNumber, _("IP Address"))) continue;
+
+			// check the validity of the Netmask field if a value is supplied
+			if (ipNetmaskNumber != nil && ipNetmaskNumber != "") {
+				if ( !IP::Check(ipNetmaskNumber) ) Popup::Error(sformat(_("%1 contains an invalid entry.\n\n%2"), _("Netmask"), IP::Valid4()));
+				continue;
+			}
+
+			//modify the current branch server object
+			y2milestone("OLD SleposSystemManager::temp_ldap_object=%1", SleposSystemManager::temp_ldap_object);
+			SleposSystemManager::temp_ldap_object = SleposSystemManager::setObjectValues("scDevice", scDevice, SleposSystemManager::temp_ldap_object);
+			SleposSystemManager::temp_ldap_object = SleposSystemManager::setObjectValues("ipHostNumber", ipHostNumber, SleposSystemManager::temp_ldap_object);
+			SleposSystemManager::temp_ldap_object = SleposSystemManager::setObjectValues("macAddress", macAddress, SleposSystemManager::temp_ldap_object);
+			SleposSystemManager::temp_ldap_object = SleposSystemManager::setObjectValues("scModul", scModul, SleposSystemManager::temp_ldap_object);
+			SleposSystemManager::temp_ldap_object = SleposSystemManager::setObjectValues("scModulOption", scModulOption, SleposSystemManager::temp_ldap_object);
+			SleposSystemManager::temp_ldap_object = SleposSystemManager::setObjectValues("ipNetmaskNumber", ipNetmaskNumber, SleposSystemManager::temp_ldap_object);
+			y2milestone("NEW SleposSystemManager::temp_ldap_object=%1", SleposSystemManager::temp_ldap_object);
+
+			break;
+		}
+		else {
+			y2error("unexpected retcode: %1", ret);
+			continue;
+		}
+	}
+
+	return ret;
+}
+
+
+/**
+ * Displays a dialog to add/modify all LDAP object values required for a high availabilty service object (scHAService)
+ * @param string object_key (DN)
+ * @return dialog result
+ */
+any scHAServiceDetailsDialog1(string object_key) {
+
+	boolean newObject = false;
+	if (object_key == nil || object_key == "") newObject = true;
+
+	if ( SleposSystemManager::temp_ldap_object == nil || SleposSystemManager::temp_ldap_object == [] ) 
+		SleposSystemManager::temp_ldap_object = SleposSystemManager::getObjectFromList(object_key, SleposSystemManager::known_ldap_objects); // grab the object from the list of LDAP objects	
+
+	string caption = sformat(_("%1 High Availabilty Service"), newObject ? _("Create") : _("Modify"));
+
+	// Must attributes
+	string cn = SleposSystemManager::getObjectValue("cn", SleposSystemManager::temp_ldap_object);
+	string ipHostNumber = SleposSystemManager::getObjectValue("ipHostNumber", SleposSystemManager::temp_ldap_object);
+	string scDnsName = SleposSystemManager::getObjectValue("scDnsName", SleposSystemManager::temp_ldap_object);
+	string scServiceName = SleposSystemManager::getObjectValue("scServiceName", SleposSystemManager::temp_ldap_object);
+	
+	term contents = `HVSquash(`Frame( caption, `VBox(
+		`Left(`TextEntry(`id(`cn), _("Name"), cn)),
+		`Left(`TextEntry(`id(`ipHostNumber), _("IP Address"), ipHostNumber)),
+		`Left(`TextEntry(`id(`scDnsName), _("DNS Name"), scDnsName)),
+		`Left(`TextEntry(`id(`scServiceName), _("Service Name"), scServiceName))
+	)));
+
+	Wizard::SetContentsButtons(caption, contents, HelpForDialog("scHAService_details1"),
+		Label::BackButton(), Label::NextButton());
+
+	any ret = nil;
+	while(true) {
+
+		ret = UI::UserInput();
+	
+		/* abort? */
+		if(ret == `abort || ret == `cancel || ret == `back) {
+			if(ReallyAbort()) break;
+			else continue;
+		}
+		else if(ret == `next) {
+			cn = (string)UI::QueryWidget(`id(`cn), `Value);
+			ipHostNumber = (string)UI::QueryWidget(`id(`ipHostNumber), `Value);
+			scDnsName = (string)UI::QueryWidget(`id(`scDnsName), `Value);
+			scServiceName = (string)UI::QueryWidget(`id(`scServiceName), `Value);
+
+			if (cn == nil || cn == "") {
+				Popup::Error(_("Name required."));
+				continue;
+			}
+			if (!SleposValidators::ValidateIPMsg(ipHostNumber, _("IP Address"))) continue;
+			if (scDnsName == nil || scDnsName == "") {
+				Popup::Error(_("DNS Name required."));
+				continue;
+			}
+			if (scServiceName == nil || scServiceName == "") {
+				Popup::Error(_("Service Name required."));
+				continue;
+			}
+
+			//modify the current branch server object
+			y2milestone("OLD SleposSystemManager::temp_ldap_object=%1", SleposSystemManager::temp_ldap_object);
+			SleposSystemManager::temp_ldap_object = SleposSystemManager::setObjectValues("cn", cn, SleposSystemManager::temp_ldap_object);
+			SleposSystemManager::temp_ldap_object = SleposSystemManager::setObjectValues("ipHostNumber", ipHostNumber, SleposSystemManager::temp_ldap_object);
+			SleposSystemManager::temp_ldap_object = SleposSystemManager::setObjectValues("scDnsName", scDnsName, SleposSystemManager::temp_ldap_object);
+			SleposSystemManager::temp_ldap_object = SleposSystemManager::setObjectValues("scServiceName", scServiceName, SleposSystemManager::temp_ldap_object);
+			y2milestone("NEW SleposSystemManager::temp_ldap_object=%1", SleposSystemManager::temp_ldap_object);
+
+			break;
+		}
+		else {
+			y2error("unexpected retcode: %1", ret);
+			continue;
+		}
+	}
+
+	return ret;
+}
+
+
+/**
+ * Displays a dialog to add/modify all LDAP object values required for a high availabilty service object (scHAService)
+ * @param string object_key (DN)
+ * @return dialog result
+ */
+any scHAServiceDetailsDialog2(string object_key) {
+
+	boolean newObject = false;
+	if (object_key == nil || object_key == "") newObject = true;
+
+	string caption = sformat(_("%1 High Availabilty Service"), newObject ? _("Create") : _("Modify"));
+
+	// Must attributes
+	string scServiceStatus = SleposSystemManager::getObjectValue("scServiceStatus", SleposSystemManager::temp_ldap_object);
+	string scServiceStartScript = SleposSystemManager::getObjectValue("scServiceStartScript", SleposSystemManager::temp_ldap_object);
+	string scPrimaryService = SleposSystemManager::getObjectValue("scPrimaryService", SleposSystemManager::temp_ldap_object);
+	// May attributes
+	string scDevice = SleposSystemManager::getObjectValue("scDevice", SleposSystemManager::temp_ldap_object);
+	
+	term contents = `HVSquash(`Frame( caption, `VBox(
+		`Left(`TextEntry(`id(`scServiceStatus), _("Service Status"), scServiceStatus)), // FIXME: are there a finite number of values of this field that we may use a ComboBox instead to dispaly those values?
+		`Left(`TextEntry(`id(`scServiceStartScript), _("Service Start Script"), scServiceStartScript)),
+		`Left(`TextEntry(`id(`scPrimaryService), _("Primary Service"), scPrimaryService)),
+		`Left(`TextEntry(`id(`scDevice), _("Device (optional)"), scDevice))
+	)));
+
+	Wizard::SetContentsButtons(caption, contents, HelpForDialog("scHAService_details2"),
+		Label::BackButton(), Label::NextButton());
+
+	any ret = nil;
+	while(true) {
+
+		ret = UI::UserInput();
+	
+		/* abort? */
+		if(ret == `abort || ret == `cancel) {
+			if(ReallyAbort()) break;
+			else continue;
+		}
+		else if (ret == `back) {
+			break;
+		}
+		else if(ret == `next) {
+			scServiceStatus = (string)UI::QueryWidget(`id(`scServiceStatus), `Value);
+			scServiceStartScript = (string)UI::QueryWidget(`id(`scServiceStartScript), `Value);
+			scPrimaryService = (string)UI::QueryWidget(`id(`scPrimaryService), `Value);
+			scDevice = (string)UI::QueryWidget(`id(`scDevice), `Value);
+
+			if (scServiceStatus == nil || scServiceStatus == "") {
+				Popup::Error(_("Service Status required."));
+				continue;
+			}
+			if (scServiceStartScript == nil || scServiceStartScript == "") { // FIXME: should we also check the validity of this value to be sure a valid path name was given?
+				Popup::Error(_("Service Start Script required."));
+				continue;
+			}
+			if (scPrimaryService == nil || scPrimaryService == "") {
+				Popup::Error(_("Primary Service required."));
+				continue;
+			}
+
+			//modify the current branch server object
+			y2milestone("OLD SleposSystemManager::temp_ldap_object=%1", SleposSystemManager::temp_ldap_object);
+			SleposSystemManager::temp_ldap_object = SleposSystemManager::setObjectValues("scServiceStatus", scServiceStatus, SleposSystemManager::temp_ldap_object);
+			SleposSystemManager::temp_ldap_object = SleposSystemManager::setObjectValues("scServiceStartScript", scServiceStartScript, SleposSystemManager::temp_ldap_object);
+			SleposSystemManager::temp_ldap_object = SleposSystemManager::setObjectValues("scPrimaryService", scPrimaryService, SleposSystemManager::temp_ldap_object);
+			SleposSystemManager::temp_ldap_object = SleposSystemManager::setObjectValues("scDevice", scDevice, SleposSystemManager::temp_ldap_object);
+			y2milestone("NEW SleposSystemManager::temp_ldap_object=%1", SleposSystemManager::temp_ldap_object);
+
+			break;
+		}
+		else {
+			y2error("unexpected retcode: %1", ret);
+			continue;
+		}
+	}
+
+	return ret;
+}
+
+
+
+
+/**
+ * Displays a dialog to add/modify all LDAP object values required for a server service object (scService)
+ * @param string object_key (DN)
+ * @return dialog result
+ */
+any scServiceDetailsDialog1(string object_key) {
+
+	boolean newObject = false;
+	if (object_key == nil || object_key == "") newObject = true;
+
+	if ( SleposSystemManager::temp_ldap_object == nil || SleposSystemManager::temp_ldap_object == [] ) 
+		SleposSystemManager::temp_ldap_object = SleposSystemManager::getObjectFromList(object_key, SleposSystemManager::known_ldap_objects); // grab the object from the list of LDAP objects	
+
+	string caption = sformat(_("%1 Service"), newObject ? _("Create") : _("Modify"));
+
+	// Must attributes
+	string cn = SleposSystemManager::getObjectValue("cn", SleposSystemManager::temp_ldap_object);
+	string ipHostNumber = SleposSystemManager::getObjectValue("ipHostNumber", SleposSystemManager::temp_ldap_object);
+	string scDnsName = SleposSystemManager::getObjectValue("scDnsName", SleposSystemManager::temp_ldap_object);
+	string scServiceName = SleposSystemManager::getObjectValue("scServiceName", SleposSystemManager::temp_ldap_object);
+	
+	term contents = `HVSquash(`Frame( caption, `VBox(
+		`Left(`TextEntry(`id(`cn), _("Name"), cn)),
+		`Left(`TextEntry(`id(`ipHostNumber), _("IP Address"), ipHostNumber)),
+		`Left(`TextEntry(`id(`scDnsName), _("DNS Name"), scDnsName)),
+		`Left(`TextEntry(`id(`scServiceName), _("Service Name"), scServiceName))
+	)));
+
+	Wizard::SetContentsButtons(caption, contents, HelpForDialog("scService_details1"),
+		Label::BackButton(), Label::NextButton());
+
+	any ret = nil;
+	while(true) {
+
+		ret = UI::UserInput();
+	
+		/* abort? */
+		if(ret == `abort || ret == `cancel || ret == `back) {
+			if(ReallyAbort()) break;
+			else continue;
+		}
+		else if(ret == `next) {
+			cn = (string)UI::QueryWidget(`id(`cn), `Value);
+			ipHostNumber = (string)UI::QueryWidget(`id(`ipHostNumber), `Value);
+			scDnsName = (string)UI::QueryWidget(`id(`scDnsName), `Value);
+			scServiceName = (string)UI::QueryWidget(`id(`scServiceName), `Value);
+
+			if (cn == nil || cn == "") {
+				Popup::Error(_("Name required."));
+				continue;
+			}
+			if (!SleposValidators::ValidateIPMsg(ipHostNumber, _("IP Address"))) continue;
+			if (scDnsName == nil || scDnsName == "") {
+				Popup::Error(_("DNS Name required."));
+				continue;
+			}
+			if (scServiceName == nil || scServiceName == "") {
+				Popup::Error(_("Service Name required."));
+				continue;
+			}
+
+			//modify the current branch server object
+			y2milestone("OLD SleposSystemManager::temp_ldap_object=%1", SleposSystemManager::temp_ldap_object);
+			SleposSystemManager::temp_ldap_object = SleposSystemManager::setObjectValues("cn", cn, SleposSystemManager::temp_ldap_object);
+			SleposSystemManager::temp_ldap_object = SleposSystemManager::setObjectValues("ipHostNumber", ipHostNumber, SleposSystemManager::temp_ldap_object);
+			SleposSystemManager::temp_ldap_object = SleposSystemManager::setObjectValues("scDnsName", scDnsName, SleposSystemManager::temp_ldap_object);
+			SleposSystemManager::temp_ldap_object = SleposSystemManager::setObjectValues("scServiceName", scServiceName, SleposSystemManager::temp_ldap_object);
+			y2milestone("NEW SleposSystemManager::temp_ldap_object=%1", SleposSystemManager::temp_ldap_object);
+
+			break;
+		}
+		else {
+			y2error("unexpected retcode: %1", ret);
+			continue;
+		}
+	}
+
+	return ret;
+}
+
+
+/**
+ * Displays a dialog to add/modify all LDAP object values required for a server service object (scService)
+ * @param string object_key (DN)
+ * @return dialog result
+ */
+any scServiceDetailsDialog2(string object_key) {
+
+	boolean newObject = false;
+	if (object_key == nil || object_key == "") newObject = true;
+
+	string caption = sformat(_("%1 Service"), newObject ? _("Create") : _("Modify"));
+
+	// Must attributes
+	string scServiceStatus = SleposSystemManager::getObjectValue("scServiceStatus", SleposSystemManager::temp_ldap_object);
+	string scServiceStartScript = SleposSystemManager::getObjectValue("scServiceStartScript", SleposSystemManager::temp_ldap_object);
+	// May attributes
+	string scServiceEmail = SleposSystemManager::getObjectValue("scServiceEmail", SleposSystemManager::temp_ldap_object);
+	
+	term contents = `HVSquash(`Frame( caption, `VBox(
+		`Left(`TextEntry(`id(`scServiceStatus), _("Service Status"), scServiceStatus)), // FIXME: are there a finite number of values of this field that we may use a ComboBox instead to dispaly those values?
+		`Left(`TextEntry(`id(`scServiceStartScript), _("Service Start Script"), scServiceStartScript)),
+		`Left(`TextEntry(`id(`scServiceEmail), _("Service Email (optional)"), scServiceEmail))
+	)));
+
+	Wizard::SetContentsButtons(caption, contents, HelpForDialog("scService_details2"),
+		Label::BackButton(), Label::NextButton());
+
+	any ret = nil;
+	while(true) {
+
+		ret = UI::UserInput();
+	
+		/* abort? */
+		if(ret == `abort || ret == `cancel) {
+			if(ReallyAbort()) break;
+			else continue;
+		}
+		else if (ret == `back) {
+			break;
+		}
+		else if(ret == `next) {
+			scServiceStatus = (string)UI::QueryWidget(`id(`scServiceStatus), `Value);
+			scServiceStartScript = (string)UI::QueryWidget(`id(`scServiceStartScript), `Value);
+			scServiceEmail = (string)UI::QueryWidget(`id(`scServiceEmail), `Value);
+
+			if (scServiceStatus == nil || scServiceStatus == "") {
+				Popup::Error(_("Service Status required."));
+				continue;
+			}
+			if (scServiceStartScript == nil || scServiceStartScript == "") { // FIXME: should we also check the validity of this value to be sure a valid path name was given?
+				Popup::Error(_("Service Start Script required."));
+				continue;
+			}
+			//FIXME: should we also check the validity of the scServiceEmail value to be sure a valid email address is specified???
+
+
+			//modify the current branch server object
+			y2milestone("OLD SleposSystemManager::temp_ldap_object=%1", SleposSystemManager::temp_ldap_object);
+			SleposSystemManager::temp_ldap_object = SleposSystemManager::setObjectValues("scServiceStatus", scServiceStatus, SleposSystemManager::temp_ldap_object);
+			SleposSystemManager::temp_ldap_object = SleposSystemManager::setObjectValues("scServiceStartScript", scServiceStartScript, SleposSystemManager::temp_ldap_object);
+			SleposSystemManager::temp_ldap_object = SleposSystemManager::setObjectValues("scServiceEmail", scServiceEmail, SleposSystemManager::temp_ldap_object);
+			y2milestone("NEW SleposSystemManager::temp_ldap_object=%1", SleposSystemManager::temp_ldap_object);
+
+			break;
+		}
+		else {
+			y2error("unexpected retcode: %1", ret);
+			continue;
+		}
+	}
+
+	return ret;
+}
+
+
+
+
+
+/**
+ * Displays a dialog to add/modify all LDAP object values required for a file-based configuration template object (scConfigFileSyncTemplate)
+ * @param string object_key (DN)
+ * @return dialog result
+ */
+any scConfigFileSyncTemplateDetailsDialog1(string object_key) {
+
+	boolean newObject = false;
+	if (object_key == nil || object_key == "") newObject = true;
+
+	if ( SleposSystemManager::temp_ldap_object == nil || SleposSystemManager::temp_ldap_object == [] ) 
+		SleposSystemManager::temp_ldap_object = SleposSystemManager::getObjectFromList(object_key, SleposSystemManager::known_ldap_objects); // grab the object from the list of LDAP objects	
+
+	string caption = sformat(_("%1 File-Based Configuration Template"), newObject ? _("Create") : _("Modify"));
+
+	// Must attributes
+	string cn = SleposSystemManager::getObjectValue("cn", SleposSystemManager::temp_ldap_object);
+	string scMust = SleposSystemManager::getObjectValue("scMust", SleposSystemManager::temp_ldap_object);
+	string scConfigFile = SleposSystemManager::getObjectValue("scConfigFile", SleposSystemManager::temp_ldap_object);
+	integer scBsize = tointeger(SleposSystemManager::getObjectValue("scBsize", SleposSystemManager::temp_ldap_object));
+
+	term contents = `HVSquash(`Frame( caption, `VBox(
+		`Left(`TextEntry(`id(`cn), _("Name"), cn)),
+		`Left(`TextEntry(`id(`scMust), _("scMust"), scMust)), // FIXME: what should this be called???
+		`Left(`TextEntry(`id(`scConfigFile), _("Config File"), scConfigFile)), // add a browse button???
+		`Left(`IntField(`id(`scBsize), _("File Size"), 0, 2147483647, scBsize)) // FIXME: size in Bytes??? //FIXME: is 2147483648 valid for the max int size?? // FIXME: can this value be defaulted?
+	)));
+
+	Wizard::SetContentsButtons(caption, contents, HelpForDialog("scConfigFileSyncTemplate_details1"),
+		Label::BackButton(), Label::NextButton());
+
+	any ret = nil;
+	while(true) {
+
+		ret = UI::UserInput();
+	
+		/* abort? */
+		if(ret == `abort || ret == `cancel || ret == `back) {
+			if(ReallyAbort()) break;
+			else continue;
+		}
+		else if(ret == `next) {
+			cn = (string)UI::QueryWidget(`id(`cn), `Value);
+			scMust = (string)UI::QueryWidget(`id(`scMust), `Value);
+			scConfigFile = (string)UI::QueryWidget(`id(`scConfigFile), `Value);
+			scBsize = (integer)UI::QueryWidget(`id(`scBsize), `Value);
+
+			if (cn == nil || cn == "") {
+				Popup::Error(_("Name required."));
+				continue;
+			}
+			if (scMust == nil || scMust == "") {
+				Popup::Error(_("FIXME: scMust??? required.")); // FIXME: what should this be called?
+				continue;
+			}
+			if (scConfigFile == nil || scConfigFile == "") {
+				Popup::Error(_("Config File required.")); // FIXME: should we also check the validity of this value to be sure a valid path name was given?
+				continue;
+			}
+
+			//modify the current branch server object
+			y2milestone("OLD SleposSystemManager::temp_ldap_object=%1", SleposSystemManager::temp_ldap_object);
+			SleposSystemManager::temp_ldap_object = SleposSystemManager::setObjectValues("cn", cn, SleposSystemManager::temp_ldap_object);
+			SleposSystemManager::temp_ldap_object = SleposSystemManager::setObjectValues("scMust", scMust, SleposSystemManager::temp_ldap_object);
+			SleposSystemManager::temp_ldap_object = SleposSystemManager::setObjectValues("scConfigFile", scConfigFile, SleposSystemManager::temp_ldap_object);
+			SleposSystemManager::temp_ldap_object = SleposSystemManager::setObjectValues("scBsize", tostring(scBsize), SleposSystemManager::temp_ldap_object);
+			y2milestone("NEW SleposSystemManager::temp_ldap_object=%1", SleposSystemManager::temp_ldap_object);
+
+			break;
+		}
+		else {
+			y2error("unexpected retcode: %1", ret);
+			continue;
+		}
+	}
+
+	return ret;
+}
+
+
+/**
+ * Displays a dialog to add/modify all LDAP object values required for a file-based configuration template object (scConfigFileSyncTemplate)
+ * @param string object_key (DN)
+ * @return dialog result
+ */
+any scConfigFileSyncTemplateDetailsDialog2(string object_key) {
+
+	boolean newObject = false;
+	if (object_key == nil || object_key == "") newObject = true;
+
+	string caption = sformat(_("%1 File-Based Configuration Template"), newObject ? _("Create") : _("Modify"));
+
+	// Must attributes
+	string scConfigFileLocalPath = SleposSystemManager::getObjectValue("scConfigFileLocalPath", SleposSystemManager::temp_ldap_object);
+	// May attributes
+	string scConfigMd5 = SleposSystemManager::getObjectValue("scConfigMd5", SleposSystemManager::temp_ldap_object);
+	string description = SleposSystemManager::getObjectValue("description", SleposSystemManager::temp_ldap_object);	
+
+	term contents = `HVSquash(`Frame( caption, `VBox(
+		`Left(`TextEntry(`id(`scConfigFileLocalPath), _("Config File Local Path"), scConfigFileLocalPath)), // add a browse button???
+		`Left(`TextEntry(`id(`scConfigMd5), _("Config File MD5 (optional)"), scConfigMd5)),
+		`Left(`TextEntry(`id(`description), _("Description (optional)"), description))
+	)));
+
+	Wizard::SetContentsButtons(caption, contents, HelpForDialog("scConfigFileSyncTemplate_details2"),
+		Label::BackButton(), Label::NextButton());
+
+	any ret = nil;
+	while(true) {
+
+		ret = UI::UserInput();
+	
+		/* abort? */
+		if(ret == `abort || ret == `cancel) {
+			if(ReallyAbort()) break;
+			else continue;
+		}
+		else if (ret == `back) {
+			break;
+		}
+		else if(ret == `next) {
+			scConfigFileLocalPath = (string)UI::QueryWidget(`id(`scConfigFileLocalPath), `Value);
+			scConfigMd5 = (string)UI::QueryWidget(`id(`scConfigMd5), `Value);
+			description = (string)UI::QueryWidget(`id(`description), `Value);
+
+			if (scConfigFileLocalPath == nil || scConfigFileLocalPath == "") { // FIXME: should we also check the validity of this value to be sure a valid path name was given?
+				Popup::Error(_("Config File Local Path required."));
+				continue;
+			}
+
+			//modify the current branch server object
+			y2milestone("OLD SleposSystemManager::temp_ldap_object=%1", SleposSystemManager::temp_ldap_object);
+			SleposSystemManager::temp_ldap_object = SleposSystemManager::setObjectValues("scConfigFileLocalPath", scConfigFileLocalPath, SleposSystemManager::temp_ldap_object);
+			SleposSystemManager::temp_ldap_object = SleposSystemManager::setObjectValues("scConfigMd5", scConfigMd5, SleposSystemManager::temp_ldap_object);
+			SleposSystemManager::temp_ldap_object = SleposSystemManager::setObjectValues("description", description, SleposSystemManager::temp_ldap_object);
+			y2milestone("NEW SleposSystemManager::temp_ldap_object=%1", SleposSystemManager::temp_ldap_object);
+
+			break;
+		}
+		else {
+			y2error("unexpected retcode: %1", ret);
+			continue;
+		}
+	}
+
+	return ret;
+}
+
+
+
+
+/**
+ * Displays a dialog to add/modify all LDAP object values required for a LDAP-based configuration template object (scConfigFileTemplate)
+ * @param string object_key (DN)
+ * @return dialog result
+ */
+any scConfigFileTemplateDetailsDialog1(string object_key) {
+
+	boolean newObject = false;
+	if (object_key == nil || object_key == "") newObject = true;
+
+	if ( SleposSystemManager::temp_ldap_object == nil || SleposSystemManager::temp_ldap_object == [] ) 
+		SleposSystemManager::temp_ldap_object = SleposSystemManager::getObjectFromList(object_key, SleposSystemManager::known_ldap_objects); // grab the object from the list of LDAP objects	
+
+	string caption = sformat(_("%1 LDAP-Based Configuration Template"), newObject ? _("Create") : _("Modify"));
+
+	// Must attributes
+	string cn = SleposSystemManager::getObjectValue("cn", SleposSystemManager::temp_ldap_object);
+	string scMust = SleposSystemManager::getObjectValue("scMust", SleposSystemManager::temp_ldap_object);
+	string scConfigFile = SleposSystemManager::getObjectValue("scConfigFile", SleposSystemManager::temp_ldap_object);
+	integer scBsize = tointeger(SleposSystemManager::getObjectValue("scBsize", SleposSystemManager::temp_ldap_object));
+
+	term contents = `HVSquash(`Frame( caption, `VBox(
+		`Left(`TextEntry(`id(`cn), _("Name"), cn)),
+		`Left(`TextEntry(`id(`scMust), _("scMust"), scMust)), // what should this be called???
+		`Left(`TextEntry(`id(`scConfigFile), _("Config File"), scConfigFile)), // add browse button???
+		`Left(`IntField(`id(`scBsize), _("Size"), 0, 2147483647, scBsize)) // FIXME: size in Bytes??? //FIXME: is 2147483648 valid for the max int size?? // FIXME: can this value be defaulted?
+	)));
+
+	Wizard::SetContentsButtons(caption, contents, HelpForDialog("scConfigFileTemplate_details1"),
+		Label::BackButton(), Label::NextButton());
+
+	any ret = nil;
+	while(true) {
+
+		ret = UI::UserInput();
+	
+		/* abort? */
+		if(ret == `abort || ret == `cancel || ret == `back) {
+			if(ReallyAbort()) break;
+			else continue;
+		}
+		else if(ret == `next) {
+			cn = (string)UI::QueryWidget(`id(`cn), `Value);
+			scMust = (string)UI::QueryWidget(`id(`scMust), `Value);
+			scConfigFile = (string)UI::QueryWidget(`id(`scConfigFile), `Value);
+			scBsize = (integer)UI::QueryWidget(`id(`scBsize), `Value);
+
+			if (cn == nil || cn == "") {
+				Popup::Error(_("Name required."));
+				continue;
+			}
+			if (scMust == nil || scMust == "") {
+				Popup::Error(_("FIXME: scMust??? required.")); // FIXME: what should this be called?
+				continue;
+			}
+			if (scConfigFile == nil || scConfigFile == "") { // FIXME: should we also check the validity of this value to be sure a valid path name was given?
+				Popup::Error(_("Config File required."));
+				continue;
+			}
+
+			//modify the current branch server object
+			y2milestone("OLD SleposSystemManager::temp_ldap_object=%1", SleposSystemManager::temp_ldap_object);
+			SleposSystemManager::temp_ldap_object = SleposSystemManager::setObjectValues("cn", cn, SleposSystemManager::temp_ldap_object);
+			SleposSystemManager::temp_ldap_object = SleposSystemManager::setObjectValues("scMust", scMust, SleposSystemManager::temp_ldap_object);
+			SleposSystemManager::temp_ldap_object = SleposSystemManager::setObjectValues("scConfigFile", scConfigFile, SleposSystemManager::temp_ldap_object);
+			SleposSystemManager::temp_ldap_object = SleposSystemManager::setObjectValues("scBsize", tostring(scBsize), SleposSystemManager::temp_ldap_object);
+			y2milestone("NEW SleposSystemManager::temp_ldap_object=%1", SleposSystemManager::temp_ldap_object);
+
+			break;
+		}
+		else {
+			y2error("unexpected retcode: %1", ret);
+			continue;
+		}
+	}
+
+	return ret;
+}
+
+
+/**
+ * Displays a dialog to add/modify all LDAP object values required for a file-based configuration template object (scConfigFileTemplate)
+ * @param string object_key (DN)
+ * @return dialog result
+ */
+any scConfigFileTemplateDetailsDialog2(string object_key) {
+
+	boolean newObject = false;
+	if (object_key == nil || object_key == "") newObject = true;
+
+	string caption = sformat(_("%1 LDAP-Based Configuration Template"), newObject ? _("Create") : _("Modify"));
+
+	// May attributes
+	string scConfigFileData = SleposSystemManager::getObjectValue("scConfigFileData", SleposSystemManager::temp_ldap_object);
+	string scConfigFileParser = SleposSystemManager::getObjectValue("scConfigFileParser", SleposSystemManager::temp_ldap_object);
+	string scConfigMd5 = SleposSystemManager::getObjectValue("scConfigMd5", SleposSystemManager::temp_ldap_object);
+	string description = SleposSystemManager::getObjectValue("description", SleposSystemManager::temp_ldap_object);	
+
+	term contents = `HVSquash(`Frame( caption, `VBox(
+		`Left(`TextEntry(`id(`scConfigFileData), _("Config File Data (optional)"), scConfigFileData)), // FIXME: should we add a really large textfield?  The data in LDAP on a working system looks like binary! Maybe add a browse button and paste the contents in the background (so the user does not have to deal with it)???
+		`Left(`TextEntry(`id(`scConfigFileParser), _("Config File Parser (optional)"), scConfigFileParser)),
+		`Left(`TextEntry(`id(`scConfigMd5), _("Config MD5 (optional)"), scConfigMd5)),
+		`Left(`TextEntry(`id(`description), _("Description (optional)"), description))
+	)));
+
+	Wizard::SetContentsButtons(caption, contents, HelpForDialog("scConfigFileTemplate_details2"),
+		Label::BackButton(), Label::NextButton());
+
+	any ret = nil;
+	while(true) {
+
+		ret = UI::UserInput();
+	
+		/* abort? */
+		if(ret == `abort || ret == `cancel) {
+			if(ReallyAbort()) break;
+			else continue;
+		}
+		else if (ret == `back) {
+			break;
+		}
+		else if(ret == `next) {
+			scConfigFileData = (string)UI::QueryWidget(`id(`scConfigFileData), `Value);
+			scConfigFileParser = (string)UI::QueryWidget(`id(`scConfigFileParser), `Value);
+			scConfigMd5 = (string)UI::QueryWidget(`id(`scConfigMd5), `Value);
+			description = (string)UI::QueryWidget(`id(`description), `Value);
+
+			//modify the current branch server object
+			y2milestone("OLD SleposSystemManager::temp_ldap_object=%1", SleposSystemManager::temp_ldap_object);
+			SleposSystemManager::temp_ldap_object = SleposSystemManager::setObjectValues("scConfigFileData", scConfigFileData, SleposSystemManager::temp_ldap_object);
+			SleposSystemManager::temp_ldap_object = SleposSystemManager::setObjectValues("scConfigFileParser", scConfigFileParser, SleposSystemManager::temp_ldap_object);
+			SleposSystemManager::temp_ldap_object = SleposSystemManager::setObjectValues("scConfigMd5", scConfigMd5, SleposSystemManager::temp_ldap_object);
+			SleposSystemManager::temp_ldap_object = SleposSystemManager::setObjectValues("description", description, SleposSystemManager::temp_ldap_object);
+			y2milestone("NEW SleposSystemManager::temp_ldap_object=%1", SleposSystemManager::temp_ldap_object);
+
+			break;
+		}
+		else {
+			y2error("unexpected retcode: %1", ret);
+			continue;
+		}
+	}
+
+	return ret;
+}
+
+
+
+/* EOF */
+}

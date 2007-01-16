@@ -1,0 +1,17 @@
+/**
+ * File:
+ *   cfg_slepos_system_manager.scr
+ * Summary:
+ *   SCR Agent for reading/writing /etc/opt/SLES/POS/adminserver.conf
+ *   using the sysconfig-agent
+ *
+ * $Id: cfg_slepos_system_manager.scr,v 1.0 2005/09/21 20:27:08 mgfritch Exp $
+ *
+ * Read/Sets the values defined in <tt>/etc/opt/SLES/POS/adminserver.conf</tt>
+ * in an easy manner.
+ */
+.slepos_system_manager
+
+`ag_ini(
+  `SysConfigFile("/etc/opt/SLES/POS/adminserver.conf")
+)
