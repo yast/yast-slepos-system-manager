@@ -1,0 +1,200 @@
+/**
+ * File:	modules/SleposValidators.ycp
+ * Package:	yast2-slepos-common
+ * Summary:	Novell Linux Point of Service validation routines
+ * Authors:	Michael G. Fritch <mgfritch@novell.com>
+ *
+ * $Id: SleposValidators.ycp,v 1.9 2005/10/13 19:25:27 mgfritch Exp $
+ *
+ */
+
+{
+
+module "SleposValidators";
+textdomain "slepos-common"; // FIXME adapt
+
+import "SleposUtils";
+import "Report";
+import "Popup";
+import "Address";
+import "IP";
+
+/**
+ * Validates two passwords to ensure they are the same and do not contain any invalid chars
+ * @param string first password
+ * @param string second password
+ * @return boolean true on success
+ */
+global boolean ValidatePasswords(string pw1 , string pw2) {
+	string valid_password_chars = "-0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ!@#$%^&*(),;:._+/|?{}=[]";
+	if (pw1 != pw2) {
+		Report::Error (_("The first and the second version\nof the password don't match!\nPlease try again."));
+		return false;
+	}
+	else if (findfirstnotof (pw1, valid_password_chars) != nil) {
+		Report::Error(_("The password may only contain the following\ncharacters:\n 0..9, a..z, A..Z, and any of \"#*,.;:._-+!$%&/|\?{[()]}\".\nPlease try again."));
+		return false;
+	}
+	return true;
+}
+
+
+/**
+ * Validate a password
+ * @param string password
+ * @return boolean true on success
+ */
+global boolean ValidatePassword(string pw1) {
+	return ValidatePasswords( pw1, pw1 );
+}
+
+
+/**
+ * Validate port, is it a valid number and is it already in use.  
+ * Displays an warning to the user if the port is in use.
+ * @param integer port number
+ * @return boolean true on success
+ */
+global boolean ValidatePort(integer port) {
+	if (port < 0 || port > 65536) {
+		Report::Error(_("Valid port numbers are from 0 to 65536.\nPlease try again."));
+		return false;
+	}
+	integer ret = (integer) SCR::Execute(.target.bash, sformat("netstat -l --numeric-ports | grep \":%1 \"", port));
+	if (ret == 0) { // success means we found another process using the specified port
+		if (! Popup::YesNo(sformat(_("Port %1 is in use, use anyway?"), port))) return false;
+	}
+	return true;
+}
+
+
+/**
+ * Validate IP address
+ * @param IP address to check
+ * @param name displayed to the user of the UI field for the IP address
+ * @return boolean true if valid IP address
+ */
+global boolean ValidateIPMsg( string ip, string field_name ) {
+	if (ip == nil || ip == "") {
+		Popup::Error(sformat(_("%1 required."), field_name));
+		return false;
+	}
+	else if (!IP::Check(ip)) {
+		Popup::Error(sformat(_("%1 contains an invalid entry.\n\n%2"), field_name, IP::Valid4()));
+		return false;
+	}
+	return true;
+}
+
+
+/**
+ * Validate DNS or IP address
+ * @param string ip or dns address
+ * @param name displayed to the user of the UI field for the IP address
+ * @return boolean true if valid DNS or IP address
+ */
+global boolean ValidateDNSorIPMsg( string ip, string field_name ) {
+	if (ip == nil || ip == "") {
+		Popup::Error(sformat(_("%1 required."), field_name));
+		return false;
+	}
+	else if ( !Address::Check(ip) ) {
+		Popup::Error(sformat(_("%1 contains an invalid entry.\n\n%2"), field_name, Address::Valid4()));
+		return false;
+	}
+	return true;
+}
+
+
+/**
+ * Checks if a specified device is a valid block device
+ * @param string device
+ * @return booelan
+ */
+global boolean ValidateDevice(string device) {
+	device = SleposUtils::Strip(device, " \t");
+	if (device == "") return true;
+
+	//check to see if the path exists
+	map rmap = (map)SCR::Read(.target.lstat, device);
+	y2debug("stat \'%1\' = %2", device, rmap);
+	if (rmap == $[]) {
+		y2error("Error: The path \'%1\' does not exist", device);
+		return false;
+	}
+	//check to see if the device is valid(S_ISBLK) and return the result
+	return (boolean)rmap["isblock"]:false;
+}
+
+
+/**
+ * ValidatePathname - Validate the characters in a proposed pathname
+ * NOTE: May not work for double-byte languages???
+ *
+ * @param string pathname, boolean check for absolute path
+ * @return boolean
+ */
+global boolean ValidatePathname(string pathname, boolean absolute) {
+	// disallow '//'
+	if (find(pathname, "//") != -1) {
+		Report::Error(sformat ( _("%1 is not a valid pathname"), pathname));
+		return false;
+	}
+	if (!absolute) return true;
+	else {
+		integer slashloc = findfirstof(pathname, "/");
+		if (slashloc != 0) {
+			Report::Error(sformat ( _("%1 is not a valid absolute pathname"), pathname));
+			return false;
+		}
+	}
+	return true;
+}
+
+/**
+ * Check for static ip and valid host name dns name
+ * - warn user of any errors
+ * Based off inst_check_ip.ycp in yast2-novell-common.rpm (OES)
+ * @return symbol 
+ */
+/*global symbol check_ip() {
+	//FIXME: For some unknown reason autobuild dies when trying to import the NetworkDevices module????
+	//FIXME: this means we cannot use SleposUtils::GetAllStaticIPAddrs();
+	string msg = "";
+	string  hostnameErrorMsg = "";
+	string  staticIPErrorMsg = "";
+	boolean hostnameError = false;
+	boolean staticIPError = false;
+	string netErrorMsg = _("Do you want to change your Network Configuration?");
+
+	// Check for hostname error
+	string host = SleposUtils::GetHostname();
+	y2milestone("inst_check_ip:started host = %1", host);
+	if (host == nil || host == "" || host == "linux"  || host == "linux.site") {
+		hostnameError = true;
+		//hostname problems
+		hostnameErrorMsg = sformat( _("The hostname '%1' is not valid.\n"),host);
+	}
+
+	list iplist = SleposUtils::GetAllStaticIPAddrs();
+	if (size(iplist) == 0) {
+		staticIPError = true;
+		staticIPErrorMsg = _("This machine does not have a static IP address.\nWithout a static IP address, eDirectory does not work.\n");
+	}
+
+	if (hostnameError && staticIPError) msg = msg + sformat("%1)",1) + hostnameErrorMsg + "\n" + sformat("%1)",2) + staticIPErrorMsg;
+	else if (hostnameError) msg = hostnameErrorMsg;
+	else if (staticIPError) msg = staticIPErrorMsg;
+	
+	if (size(msg) > 0) {
+		if (Report::AnyQuestion(_("Invalid Network Configuration"), sformat("%1\n%2\n\n", msg, netErrorMsg), _("&Yes"), _("N&o"), `focus_yes)) return `net;
+		else return `skip;
+	}
+
+	return `next;
+}
+*/
+
+
+/* EOF */
+}
