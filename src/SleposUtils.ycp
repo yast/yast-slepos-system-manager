@@ -15,18 +15,15 @@ module "SleposUtils";
 // FIXME: slepos-image-builder depends on this module, if not moved to
 // any of the base YaST packages, we must consider either a new dependency
 // or move of this file to a new package
-textdomain "slepos-common"; // FIXME adapt according to where
-			    // it finally resides
+textdomain "slepos-common";
 
 import "Popup";
 import "Report";
 import "Mode";
-import "Require";
+import "Package";
 import "Label";
 import "Address";
 import "IP";
-//import "NetworkDevices";
-import "Map";
 
 /**
  * Displays a formatted popup error message, with a details button.
@@ -62,7 +59,7 @@ global void errorLogging (string errorMessage, map out, string cmd) ``{
 	}
 }
 
-
+// TODO move Strip* functions to String::
 
 /**
  * Strip leading "stripChars"
@@ -107,7 +104,7 @@ global string Strip( string str, string stripChars ) {
 }
 
 
-/**
+/** TODO String::Replace ???
  * Replace the substring "replace" with the string "replacement" throughout
  * the input string text
  * @param string text, string replace, string replacement
@@ -311,94 +308,6 @@ global list ExtractCN(string fdn) {
 }
 
 
-/**
- * Checks if needed packages are installed
- * if not, install the needed packages
- * @param string product name, list<string> rpm names
- * @return boolean
- */
-global boolean rpmsInstalled(string product_name, list<string> rpm_list) {
-/*
-// FIXME: cannot build the following code on a SuSE 9.3 box.... :-(
-//	if (!Mode::test) {  // This is the correct code for SLES9
-	if (!Mode::test()) {  // This is the correct code for SLES10
-*/
-		/* ensure edirectory package is installed */
-		if( !Require::RequireAndConflictTarget( rpm_list, [],
-			// notification about package needed 1/2
-			_("<p>To configure ") + product_name + _(", the <b>%1</b> package must be installed.</p>") +
-			// notification about package needed 2/2
-			_("<p>Do you want to install it now?</p>") ))
-		{
-			// translators: error popup before aborting the module
-			y2error("Required %1 rpms are NOT installed!", rpm_list);
-			Popup::Error(_("YaST2 cannot continue the configuration without installing the required packages."));
-			return false;
-		}
-//	}
-	y2milestone("Required %1 rpms are installed", product_name);
-	return true;
-}
-
-
-/**
- * Will check if a specified RPM is installed
- * @param string rpm name
- * @return true if package is installed, false otherwise
- */
-global boolean isRPMInstalled(string rpmname) {
-	string cmd = sformat("rpm -qa %1", rpmname);
-	integer ret = (integer)SCR::Execute(.target.bash, cmd);
-	if ( ret != 0 ) {
-		y2debug("RPM not installed: %1", rpmname);
-		return false;
-	}
-	return true;
-}
-
-
-/**
- * See if the specified product was installed during phase 1 of the install.  This is how we determine if a product
- * should show up in the proposal screen.  The input parameter "selection_name" should match the name of the selection
- * file for which information is required (e.g. novell-imanager, novell-ifolder2, X11, Linux_tools, etc.). The
- * parameter "selection_name" is not case sensitive.
- * @param string selection file name
- * @return boolean true on success
- */
-global boolean IsSelectionInstalled(string selection_name) {
-	if( selection_name == nil || selection_name == "" ) {
-		y2milestone("SleposUtils.IsSelectionInstalled:returned false due to empty input parameter.");
-		return false;
-	}
-	
-	// toupper this because we are not case sensitive.
-	string sel_name = toupper(selection_name);
-	sel_name = CleanUpString( sel_name );
-	y2milestone("SleposUtils.IsSelectionInstalled:selection_name: %1", sel_name);
-	
-	// Get the list of selections that were installed during phase 1 of the install.
-	list<string> installed_selections = Pkg::GetSelections (`installed, "");
-	y2debug ("SleposUtils:installed selections are %1", installed_selections);
-	
-	integer idx = -1;
-	boolean found = false;
-	
-	// See if selection_name matches any of the module names returned.
-	foreach (string sel, installed_selections, {
-		sel = CleanUpString( sel );
-		// bugzilla 98532
-		//      idx = find( toupper(sel), sel_name );
-		//      if( idx  >= 0 )
-		if( toupper(sel) == sel_name ) {
-			found = true;
-			break;
-		}
-	});
-	
-	y2milestone("SleposUtils.IsSelectionInstalled: %1 : %2", selection_name, found);
-	return found;
-}
-
 
 /**
  * Get contents of environment variable.
@@ -456,13 +365,7 @@ global string GetHostname() {
 	map rmap = (map)SCR::Execute(.target.bash_output, "hostname");
 	if (rmap["exit"]:-1 == 0) {
 		string hostname = rmap["stdout"]:"";
-		hostname = Strip(hostname, " \n\t\r");
-	
-		// Since the strip command above does not seem to remove LF chars...
-		integer idx = find( hostname, "\n");
-		if (idx >= 0) hostname = substring(hostname,0,idx);
-	
-		return hostname;
+		return CleanUpString (hostname);
 	}
 	else return "";
 }
@@ -476,13 +379,7 @@ global string GetDomainname() {
 	map rmap = (map)SCR::Execute(.target.bash_output, "hostname -d");
 	if (rmap["exit"]:-1 == 0) {
 		string hostname = rmap["stdout"]:"";
-		hostname = Strip(hostname, " \n\t\r");
-	
-		// Since the strip command above does not seem to remove LF chars...
-		integer idx = find( hostname, "\n");
-		if (idx >= 0) hostname = substring(hostname,0,idx);
-	
-		return hostname;
+		return CleanUpString (hostname);
 	}
 	else return "";
 }
@@ -498,13 +395,7 @@ global string GetDNSname() {
 	map rmap = (map)SCR::Execute(.target.bash_output, "hostname -f");
 	if (rmap["exit"]:-1 == 0) {
 		string hostname = rmap["stdout"]:"";
-		hostname = Strip(hostname, " \n\t\r");
-	
-		// Since the strip command above does not seem to remove LF chars...
-		integer idx = find( hostname, "\n");
-		if (idx >= 0) hostname = substring(hostname,0,idx);
-	
-		return hostname;
+		return CleanUpString (hostname);
 	}
 	else return "";
 }
@@ -582,83 +473,6 @@ global string GetIPAddrEth0() {
 	return (IP::ToString(ip));
 }
 
-
-/**
- *  Returns a map of all network interfaces with
- *  static IP addresses
- *
- *  The returned map is structued as follows:
- *
- *  $[IP_Address:Hardware_Address]
- *
- * @return map
- */
-/*map GetAllStaticInterfaces() {
-//FIXME: For some unknown reason autobuild dies when trying to import the NetworkDevices module????
-	//read current settings for network
-	NetworkDevices::Read();
-
-	//generate the map: static IP -> device
-	map ip2device = $[];
-	list<string>devs=NetworkDevices::Locate("BOOTPROTO","static");
-	foreach(string dev, devs, {
-		string ip=NetworkDevices::GetValue(dev,"IPADDR");
-		if(ip!=nil && ip != "")ip2device[ip]=dev;
-	});
-	
-	y2debug("Mapping of IP addresses and network devices: %1",ip2device);
-	return ip2device;
-}*/
-
-/**
- * The original method is found above (GetIPAddrEth0)
- * It was insufficient as it only returned the IP address
- * associated with eth0
- *
- * This updated function gets the IP address of the 1st
- * interface with a static address
- *
- * If there are no such addresses then return empty string
- *
- * @return string ip address
- */
-/*global string GetIPAddr() {
-//FIXME: For some unknown reason autobuild dies when trying to import the NetworkDevices module????
-	string ip = "";
-	map staticInterfaces = GetAllStaticInterfaces();
-	
-	list addrList = Map::Keys(staticInterfaces);
-	integer count = size(addrList);
-	integer i=0;
-	while (i < count) {
-		ip = (string) addrList[0]:"";
-		if (ip != "") {
-			// We use Address here rather than calling
-			// NovellValidators to avoid cyclic dependency
-			// between NovellUtils and NovellValidators
-			if (Address::Check4(ip)) {
-				y2debug("First static IP address %1", ip);
-				return ip;
-			}
-		}
-		i=i+1;
-	}
-	y2milestone("First static IP address %1", ip);
-	return "";
-}*/
-
-
-/**
- * Returns a list of all static IP addresses found on the system
- * @return list
- */
-/*global list GetAllStaticIPAddrs() {
-//FIXME: For some unknown reason autobuild dies when trying to import the NetworkDevices module????
-	map staticInterfaces = GetAllStaticInterfaces();
-	list addrList = Map::Keys(staticInterfaces);
-	return addrList;
-}
-*/
 
 /**
  * Given an IP address return the device to which
