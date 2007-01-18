@@ -11,13 +11,13 @@
 {
 
 module "SleposValidators";
-textdomain "slepos-common"; // FIXME adapt
+textdomain "slepos-system-manager";
 
-import "SleposUtils";
 import "Report";
 import "Popup";
 import "Address";
 import "IP";
+import "String";
 
 /**
  * Validates two passwords to ensure they are the same and do not contain any invalid chars
@@ -112,7 +112,7 @@ global boolean ValidateDNSorIPMsg( string ip, string field_name ) {
  * @return booelan
  */
 global boolean ValidateDevice(string device) {
-	device = SleposUtils::Strip(device, " \t");
+	device = String::CutBlanks (device);
 	if (device == "") return true;
 
 	//check to see if the path exists

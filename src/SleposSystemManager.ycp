@@ -19,7 +19,7 @@ import "Progress";
 import "Report";
 import "Popup";
 import "Summary";
-import "SleposUtils";
+import "String";
 import "Mode";
 
 global map SettingsMap = $[]; // Global settings
@@ -228,7 +228,9 @@ global boolean removeObjectFromLDAP(string dn, boolean recursive) {
 		Popup::ClearFeedback();
 		SleposSystemManager::temp_ldap_object = SleposSystemManager::getObjectFromList(dn, known_ldap_objects); // grab the object from the list of LDAP objects	
 		string objectClass = getObjectValue("objectClass", temp_ldap_object);
-		SleposUtils::errorLogging(sformat(_("Failed to remove the selected %1"), ReturnTextForObjectClass(objectClass)), retmap, display_cmd);
+
+		// popup error message %1 is object class description (human readable)
+		Popup::ErrorDetails (sformat(_("Failed to remove the selected %1"), ReturnTextForObjectClass(objectClass)), retmap["stderr"]:"");
 		return false;
 	}
 	return true;
@@ -652,7 +654,8 @@ global list <list <list <string> > > GetObjectsFromLDAP(string objectClass, stri
 	if (retmap["exit"]:-1 != 0) {
 		if (displayUI) {
 			Popup::ClearFeedback();
-			SleposUtils::errorLogging(sformat(_("An error occured while reading the %1 settings"), displayObjectClass), retmap, display_cmd);
+			// popup error message %1 is object class description (human readable)
+			Popup::ErrorDetails (sformat(_("An error occured while reading the %1 settings"),  displayObjectClass), retmap["stderr"]:"");
 		}
 		return nil;
 	}
@@ -675,8 +678,9 @@ global list <list <list <string> > > GetObjectsFromLDAP(string objectClass, stri
 				list tokens = regexptokenize(line, "^(.*):[ \t\n](.*)");
 				y2milestone("tokens: %1", tokens);
 				if (size(tokens) == 2) {
-					string a = SleposUtils::Strip(tokens[0]:"", " \t\n");
-					string b = SleposUtils::Strip(tokens[1]:"", " \t\n");
+y2internal ("FIXME original Strip function removed also \n....");
+					string a = String::CutBlanks (tokens[0]:"");
+					string b = String::CutBlanks (tokens[1]:"");
 					if (a != nil && a != "")
 						if (b != nil && b != "")
 							return [a,b];
@@ -787,10 +791,12 @@ global boolean modifyObjectToLDAP(list <list <string> > ldap_object) {
 	map retmap = (map) SCR::Execute(.target.bash_output, cmd);
 	if (retmap["exit"]:-1 != 0) {
 		string objectClassText = ReturnTextForObjectClass(objectClass);
-		string errmsg = "";
-		if (objectClassText != nil && objectClassText != "") errmsg = sformat(_("A error occured while modifying the %1"), objectClassText);
-		else errmsg = _("A error occured while modifying the selected object");
-		SleposUtils::errorLogging(errmsg, retmap, display_cmd);
+		// popup error message
+		string errmsg = _("A error occured while modifying the selected object");
+		if (objectClassText != nil && objectClassText != "")
+		    // popup error message
+		    errmsg = sformat (_("A error occured while modifying the %1"), objectClassText);
+		Popup::ErrorDetails (errmsg, retmap["stderr"]:"");
 		return false;
 	}
 	return true;

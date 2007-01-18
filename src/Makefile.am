@@ -19,7 +19,6 @@ desktop_DATA =			\
 
 module_DATA =			\
 	SleposSystemManager.ycp	\
-	SleposUtils.ycp		\
 	SleposValidators.ycp
 
 EXTRA_DIST = $(client_DATA) $(ynclude_DATA) $(module_DATA) $(desktop_DATA)

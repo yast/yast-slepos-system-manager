@@ -1,8 +1,8 @@
 @HEADER-COMMENT@
-# neededforbuild yast2-devel-packages yast2-slepos-common yast2-country yast2-network yast2-installation
+# neededforbuild yast2-devel-packages yast2-country yast2-network yast2-installation
 
 @HEADER@
-Requires:	yast2 yast2-slepos-common POS_Server-Admin2
+Requires:	yast2 POS_Server-Admin2
 
 BuildArchitectures:	noarch
 
