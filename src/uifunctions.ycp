@@ -20,43 +20,7 @@ import "Map";
 
 include "slepos-system-manager/subdialogs.ycp";
 include "slepos-system-manager/subwizards.ycp";
-
-
-// EXAMPLE FUNCTIONS
-/**
- *	void ExampleInit(string key) {
- *		y2milestone("Example Init");
- *	}
- *
- *	symbol ExampleHandle(string key, map event) {
- *		any ret = event["ID"]:nil;
- *		y2milestone("Example Handle");
- *		return nil;
- *	}
- *
- *	void ExampleStore(string key, map event) {
- *		any ret = event["ID"]:nil;
- *		y2milestone("Example Store");
- *	}
- *
- */
-
-
-
-/**
- * Check is a given text widget has been completed, disply error if widget is empty
- * @param sting id of widget
- * @return boolean false if widget is empty
- */
-boolean CheckExistency(string ui_id) {
-	if (UI::QueryWidget(`id(ui_id), `Value) == "") {
-	    UI::SetFocus(`id(ui_id));
-	    // TRANSLATORS: popup message
-	    Popup::Error(_("This entry must be completed."));
-	    return false;
-	}
-	return true;
-}
+include "slepos-system-manager/routines.ycp";
 
 
 /**
@@ -75,8 +39,8 @@ void InitTableDialog() {
  * @return dialog result
  */
 symbol HandlePopupRemoveTableObject (string object_key) {
-	SleposSystemManager::temp_ldap_object = SleposSystemManager::getObjectFromList(object_key, SleposSystemManager::known_ldap_objects); // grab the object from the list of LDAP objects	
-	string objectClass = SleposSystemManager::getObjectValue("objectClass", SleposSystemManager::temp_ldap_object);
+	SleposSystemManager::temp_ldap_object = getObjectFromList(object_key, SleposSystemManager::known_ldap_objects); // grab the object from the list of LDAP objects	
+	string objectClass = getObjectValue("objectClass", SleposSystemManager::temp_ldap_object);
 	string displayObjectClass = SleposSystemManager::ReturnTextForObjectClass(objectClass);
 	if ( Popup::YesNo(sformat(_("Are you sure you want to remove the selected %1"), displayObjectClass))) {
 		Popup::ShowFeedback(sformat(_("Removing %1 Settings"), displayObjectClass), _("Please wait..."));
@@ -93,7 +57,7 @@ symbol HandlePopupRemoveTableObject (string object_key) {
  * @return boolean true on success
  */
 boolean HandleModifyTableObject() {
-	string objectClass = SleposSystemManager::getObjectValue("objectClass", SleposSystemManager::temp_ldap_object);
+	string objectClass = getObjectValue("objectClass", SleposSystemManager::temp_ldap_object);
 	Popup::ShowFeedback(sformat(_("Modifying %1 Settings"), SleposSystemManager::ReturnTextForObjectClass(objectClass)), _("Please wait..."));
 	boolean success = SleposSystemManager::modifyObjectToLDAP(SleposSystemManager::temp_ldap_object);
 	Popup::ClearFeedback();
@@ -107,25 +71,25 @@ boolean HandleModifyTableObject() {
  */
 boolean HandleAddTableObject() {
 	// what is the objectClass of the new LDAP object?
-	string objectClass = SleposSystemManager::getObjectValue("objectClass", SleposSystemManager::temp_ldap_object);
+	string objectClass = getObjectValue("objectClass", SleposSystemManager::temp_ldap_object);
 	string base = Wizard::QueryTreeItem(); // NOTE: this must happen before the Popup::ShowFeedback...otherwise we will not have the tree in the current dialog scope.
 
 	Popup::ShowFeedback(sformat(_("Creating %1 Settings"), SleposSystemManager::ReturnTextForObjectClass(objectClass)), _("Please wait..."));
 	
-	string dn = SleposSystemManager::getObjectValue("DN", SleposSystemManager::temp_ldap_object);
+	string dn = getObjectValue("DN", SleposSystemManager::temp_ldap_object);
 	if (dn == nil || dn == "") { // new object
 		// Figure out the DN for this object
 		base = regexpsub(base, "(.*)@(.*)", "\\1");
 		if (objectClass == nil || objectClass == "") y2error("A valid objectClass was not specified in the LDAP object");
 		if (objectClass == "scNetworkcard") {// scNetworkcard requires a special case...it does not use attribute cn!
-			string scDevice = SleposSystemManager::getObjectValue("scDevice", SleposSystemManager::temp_ldap_object);
+			string scDevice = getObjectValue("scDevice", SleposSystemManager::temp_ldap_object);
 			dn = sformat("scDevice=%1,%2", scDevice, base);
 		}
 		else {
-			string cn = SleposSystemManager::getObjectValue("cn", SleposSystemManager::temp_ldap_object);
+			string cn = getObjectValue("cn", SleposSystemManager::temp_ldap_object);
 			dn = sformat("cn=%1,%2", cn, base);
 		}
-		SleposSystemManager::temp_ldap_object = SleposSystemManager::setObjectValues("DN", dn, SleposSystemManager::temp_ldap_object);
+		SleposSystemManager::temp_ldap_object = setObjectValues("DN", dn, SleposSystemManager::temp_ldap_object);
 	}
 	// add the new object to LDAP
 	boolean success = SleposSystemManager::modifyObjectToLDAP(SleposSystemManager::temp_ldap_object);
@@ -155,13 +119,13 @@ void RedrawObjectTableDialog() {
 	list <term> table_items = [];
 
 	// listing all known children objects (services, hardware, etc.)
-	foreach (list <list <string> > object, SleposSystemManager::known_ldap_objects, {
-		string objectDN = SleposSystemManager::getObjectValue("DN", object);
-		string cn = SleposSystemManager::getObjectValue("cn", object);
-		string objectClass = SleposSystemManager::getObjectValue("objectClass", object);
+	foreach (list object, SleposSystemManager::known_ldap_objects, {
+		string objectDN = getObjectValue("DN", object);
+		string cn = getObjectValue("cn", object);
+		string objectClass = getObjectValue("objectClass", object);
 		string objectClassText = SleposSystemManager::ReturnTextForObjectClass(objectClass);
 		if (objectClass == "scNetworkcard" || objectClass == "scHarddisk" || objectClass == "scRamDisk") {
-			cn = SleposSystemManager::getObjectValue("scDevice", object); // display scDevice as the cn (name) for scNetworkcard and scRamDisk
+			cn = getObjectValue("scDevice", object); // display scDevice as the cn (name) for scNetworkcard and scRamDisk
 		}
 		table_items = add (table_items, `item( `id(objectDN),
 			cn,
@@ -220,8 +184,8 @@ symbol HandleObjectTableDialog (string key, map event) {
 		if (current_item != nil && current_item != "") {
 			SleposSystemManager::temp_ldap_object = []; // clear out any old stuff
 			// figure out what type of object is selected in the table
-			SleposSystemManager::temp_ldap_object = SleposSystemManager::getObjectFromList(current_item, SleposSystemManager::known_ldap_objects); // grab the location object from the list of LDAP objects	
-			string objectClass = SleposSystemManager::getObjectValue("objectClass", SleposSystemManager::temp_ldap_object);
+			SleposSystemManager::temp_ldap_object = getObjectFromList(current_item, SleposSystemManager::known_ldap_objects); // grab the location object from the list of LDAP objects	
+			string objectClass = getObjectValue("objectClass", SleposSystemManager::temp_ldap_object);
 			if (objectClass == nil || objectClass == "") {
 				y2error("A valid objectClass was not specified in the LDAP object");
 				return nil;
@@ -276,13 +240,13 @@ void RedrawscLocationTableDialog() {
 	list <term> table_items = [];
 
 	// listing all known branch locations
-	foreach (list <list <string> > ldap_object, SleposSystemManager::known_ldap_objects, {
-		string dn = SleposSystemManager::getObjectValue("DN", ldap_object);
+	foreach (list ldap_object, SleposSystemManager::known_ldap_objects, {
+		string dn = getObjectValue("DN", ldap_object);
 		table_items = add (table_items, `item( `id(dn),
-			SleposSystemManager::getObjectValue("cn", ldap_object),
-			SleposSystemManager::GetDomainName(dn),
-			SleposSystemManager::getObjectValue("ipNetworkNumber", ldap_object),
-			SleposSystemManager::getObjectValue("ipNetmaskNumber", ldap_object)
+			getObjectValue("cn", ldap_object),
+			GetDomainName (dn),
+			getObjectValue("ipNetworkNumber", ldap_object),
+			getObjectValue("ipNetmaskNumber", ldap_object)
 		));
 	});
 
@@ -381,12 +345,12 @@ void Redraw_scBranchServer_scWorkstation_TableDialog() {
 	list <term> table_items = [];
 
 	// listing all known branch servers
-	foreach (list <list <string> > object, SleposSystemManager::known_ldap_objects, {
-		if (SleposSystemManager::getObjectValue("objectClass", object) == "scBranchServer") {
-			string objectDN = SleposSystemManager::getObjectValue("DN", object);
+	foreach (list object, SleposSystemManager::known_ldap_objects, {
+		if (getObjectValue("objectClass", object) == "scBranchServer") {
+			string objectDN = getObjectValue("DN", object);
 			table_items = add (table_items, `item( `id(objectDN),
-				SleposSystemManager::getObjectValue("cn", object),
-				SleposSystemManager::GetDomainName(objectDN)
+				getObjectValue("cn", object),
+				GetDomainName (objectDN)
 			));
 		}
 	});
@@ -394,14 +358,14 @@ void Redraw_scBranchServer_scWorkstation_TableDialog() {
 
 	table_items = [];
 	// listing all known workstations
-	foreach (list <list <string> > object, SleposSystemManager::known_ldap_objects, {
-		if (SleposSystemManager::getObjectValue("objectClass", object) == "scWorkstation") {
-			string objectDN = SleposSystemManager::getObjectValue("DN", object);
+	foreach (list object, SleposSystemManager::known_ldap_objects, {
+		if (getObjectValue("objectClass", object) == "scWorkstation") {
+			string objectDN = getObjectValue("DN", object);
 			table_items = add (table_items, `item( `id(objectDN),
-				SleposSystemManager::getObjectValue("cn", object),
-				SleposSystemManager::GetDomainName(objectDN),
-				SleposSystemManager::getObjectValue("macAddress", object),
-				SleposSystemManager::getObjectValue("ipHostNumber", object)
+				getObjectValue("cn", object),
+				GetDomainName (objectDN),
+				getObjectValue("macAddress", object),
+				getObjectValue("ipHostNumber", object)
 			));
 		}
 	});
@@ -533,11 +497,11 @@ void RedrawscRefObjectContainerTableDialog() {
 	list <term> table_items = [];
 
 	// listing all known ref. object container objects
-	foreach (list <list <string> > object, SleposSystemManager::known_ldap_objects, {
-		if (SleposSystemManager::getObjectValue("objectClass", object) == "scRefObjectContainer") {
-			string objectDN = SleposSystemManager::getObjectValue("DN", object);
+	foreach (list object, SleposSystemManager::known_ldap_objects, {
+		if (getObjectValue("objectClass", object) == "scRefObjectContainer") {
+			string objectDN = getObjectValue("DN", object);
 			table_items = add (table_items, `item( `id(objectDN),
-				SleposSystemManager::getObjectValue("cn", object)
+				getObjectValue("cn", object)
 			));
 		}
 	});
@@ -631,15 +595,15 @@ symbol HandlescRefObjectContainerTableDialog(string key, map event) {
 void Redraw_scDistributionContainer_scCashRegister_TableDialog() {
 	list <term> table_items = [];
 	// listing all known distribution container objects
-	foreach (list <list <string> > object, SleposSystemManager::known_ldap_objects, {
-		if (SleposSystemManager::getObjectValue("objectClass", object) == "scDistributionContainer") {
-			string objectDN = SleposSystemManager::getObjectValue("DN", object);
+	foreach (list object, SleposSystemManager::known_ldap_objects, {
+		if (getObjectValue("objectClass", object) == "scDistributionContainer") {
+			string objectDN = getObjectValue("DN", object);
 			table_items = add (table_items, `item( `id(objectDN),
-				SleposSystemManager::getObjectValue("cn", object),
-				SleposSystemManager::getObjectValue("scKernelVersion", object),
-				SleposSystemManager::getObjectValue("scKernelName", object),
-				SleposSystemManager::getObjectValue("scInitrdName", object),
-				SleposSystemManager::getObjectValue("scKernelMatch", object)
+				getObjectValue("cn", object),
+				getObjectValue("scKernelVersion", object),
+				getObjectValue("scKernelName", object),
+				getObjectValue("scInitrdName", object),
+				getObjectValue("scKernelMatch", object)
 			));
 		}
 	});
@@ -647,16 +611,16 @@ void Redraw_scDistributionContainer_scCashRegister_TableDialog() {
 
 	table_items = [];
 	// listing all known hardware reference objects
-	foreach (list <list <string> > object, SleposSystemManager::known_ldap_objects, {
-		if (SleposSystemManager::getObjectValue("objectClass", object) == "scCashRegister") {
-			string objectDN = SleposSystemManager::getObjectValue("DN", object);
-			list <list <list <string> > > image_objects = SleposSystemManager::GetObjectsFromLDAP("scPosImage", nil, true);
-			list <list <string> > image_object = SleposSystemManager::getObjectFromList(SleposSystemManager::getObjectValue("scPosImageDn", object), image_objects);
+	foreach (list object, SleposSystemManager::known_ldap_objects, {
+		if (getObjectValue("objectClass", object) == "scCashRegister") {
+			string objectDN = getObjectValue("DN", object);
+			list<list> image_objects = SleposSystemManager::GetObjectsFromLDAP("scPosImage", nil, true);
+			list image_object = getObjectFromList(getObjectValue("scPosImageDn", object), image_objects);
 			table_items = add (table_items, `item( `id(objectDN),
-				SleposSystemManager::getObjectValue("cn", object),
-				SleposSystemManager::getObjectValue("scCashRegisterName", object),
-				SleposSystemManager::getObjectValue("scImageName", image_object),
-				SleposSystemManager::getObjectValue("scDiskJournal", object)
+				getObjectValue("cn", object),
+				getObjectValue("scCashRegisterName", object),
+				getObjectValue("scImageName", image_object),
+				getObjectValue("scDiskJournal", object)
 			));
 		}
 	});
@@ -783,17 +747,17 @@ void RedrawscPosImageTableDialog() {
 	list <term> table_items = [];
 
 	// listing all known image reference objects
-	foreach (list <list <string> > object, SleposSystemManager::known_ldap_objects, {
-		if (SleposSystemManager::getObjectValue("objectClass", object) == "scPosImage") {
-			string objectDN = SleposSystemManager::getObjectValue("DN", object);
+	foreach (list object, SleposSystemManager::known_ldap_objects, {
+		if (getObjectValue("objectClass", object) == "scPosImage") {
+			string objectDN = getObjectValue("DN", object);
 			table_items = add (table_items, `item( `id(objectDN),
-				SleposSystemManager::getObjectValue("scImageName", object),
-				SleposSystemManager::getObjectValue("scPosImageVersion", object),
-				SleposSystemManager::getObjectValue("scImageFile", object),
-				SleposSystemManager::getObjectValue("scBsize", object),
-				SleposSystemManager::getObjectValue("scDhcpOptionsRemote", object),
-				SleposSystemManager::getObjectValue("scDhcpOptionsLocal", object),
-				SleposSystemManager::getObjectValue("scConfigFile", object)
+				getObjectValue("scImageName", object),
+				getObjectValue("scPosImageVersion", object),
+				getObjectValue("scImageFile", object),
+				getObjectValue("scBsize", object),
+				getObjectValue("scDhcpOptionsRemote", object),
+				getObjectValue("scDhcpOptionsLocal", object),
+				getObjectValue("scConfigFile", object)
 			));
 		}
 	});

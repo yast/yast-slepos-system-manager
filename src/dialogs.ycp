@@ -15,14 +15,12 @@ import "Label";
 import "Wizard";
 import "SleposSystemManager";
 
-////FIXME: SleposDialogTree is for SLES9 only! When this module moves to SLES 10 must use the DialogTree module provided by SuSE!
-//import "SleposDialogTree"; // SLES9
-import "DialogTree"; // SLES10
+import "DialogTree";
 
 include "slepos-system-manager/helps.ycp";
-include "slepos-system-manager/complex.ycp";
 include "slepos-system-manager/subdialogs.ycp";
 include "slepos-system-manager/uifunctions.ycp";
+include "slepos-system-manager/routines.ycp";
 
 
 /**
@@ -242,11 +240,11 @@ boolean InitDialogTree2(list<map> objectMapList, boolean addToTree) {
 	foreach (map objectMap, objectMapList, {
 		string objectClass = objectMap["objectClass"]:"";
 		string searchBase = objectMap["searchBase"]:"";
-		SleposSystemManager::known_ldap_objects = (list <list <list <string> > >) union(SleposSystemManager::known_ldap_objects, SleposSystemManager::GetObjectsFromLDAP(objectClass, searchBase, true));
-		foreach (list <list <string> > object, SleposSystemManager::known_ldap_objects, {
-			if (SleposSystemManager::getObjectValue("objectClass", object) == objectClass && addToTree) {
-				string dn = SleposSystemManager::getObjectValue("DN", object);
-				string cn = SleposSystemManager::getObjectValue("cn", object);
+		SleposSystemManager::known_ldap_objects = (list<list>) union(SleposSystemManager::known_ldap_objects, SleposSystemManager::GetObjectsFromLDAP(objectClass, searchBase, true));
+		foreach (list object, SleposSystemManager::known_ldap_objects, {
+			if (getObjectValue("objectClass", object) == objectClass && addToTree) {
+				string dn = getObjectValue("DN", object);
+				string cn = getObjectValue("cn", object);
 				string TreeID = sformat("%1@%2", dn, objectClass);
 				InternalTree = add(InternalTree, $["id":TreeID, "title":cn, "parent":current_screen]);
 				screens[TreeID] = screens[objectClass]:$[];
@@ -389,13 +387,11 @@ symbol RunSystemManagerDialogs () {
 		InitDialogTree();
 
 		y2debug("*******************************************************************");
-		y2debug("SleposDialogTree::ShowAndRun()");
 		y2debug("screens: %1", screens);
 		y2debug("widgets_handling: %1", widgets_handling);
 		y2debug("*******************************************************************");
 
-//		ret = SleposDialogTree::ShowAndRun ($[ // SLES9
-		ret = DialogTree::ShowAndRun ($[ // SLES10
+		ret = DialogTree::ShowAndRun ($[
 			"tree_creator"		: GetDisplayTree,
 //			"initial_screen"	: "eastbay@scLocation",
 			"initial_screen"	: SleposSystemManager::SettingsMap["current_screen"]:"",
@@ -410,6 +406,17 @@ symbol RunSystemManagerDialogs () {
 		y2milestone("DialogTree::ShowAndRun returned: %1", ret);
 	}
 	return (symbol) ret;
+}
+
+/**
+ * Read settings dialog
+ * @return `abort if aborted and `next otherwise
+ */
+symbol ReadDialog() {
+    Wizard::RestoreHelp(HELPS["read"]:"");
+    // SleposSystemManager::AbortFunction = PollAbort;
+    boolean ret = SleposSystemManager::Read();
+    return ret ? `next : `abort;
 }
 
 

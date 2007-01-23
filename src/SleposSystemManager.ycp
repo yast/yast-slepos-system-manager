@@ -18,13 +18,20 @@ textdomain "slepos-system-manager";
 import "Progress";
 import "Report";
 import "Popup";
-import "Summary";
 import "String";
 import "Mode";
 
-global map SettingsMap = $[]; // Global settings
-global list <list <list <string> > > known_ldap_objects = []; // List of LDAP object attribuites for the currently selected tab in the UI (i.e. branch server, workstation, etc.)
-global list <list <string> > temp_ldap_object = []; // used for storing an ldap object when it is being modified.
+include "slepos-system-manager/routines.ycp";
+
+// Global settings
+global map SettingsMap = $[];
+
+// List of LDAP object attribuites for the currently selected tab in the UI
+// (i.e. branch server, workstation, etc.)
+global list <list> known_ldap_objects = [];
+
+// used for storing an ldap object when it is being modified.
+global list temp_ldap_object = [];
 
 /**
  * Prototypes
@@ -36,15 +43,6 @@ global boolean Modified();
  */
 global boolean modified = false;
 
-/**
- */
-global boolean proposal_valid = false;
-
-/**
- * Write only, used during autoinstallation.
- * Don't run services and SuSEconfig, it's all done at one place.
- */
-global boolean write_only = false;
 
 /**
  * Abort function
@@ -101,116 +99,6 @@ global string ReturnTextForObjectClass(string objectClass) {
 }
 
 
-/**
- * Returns the domain name (DNS location) of a scLocation LDAP DN
- * Example: cn=branch,ou=provo,o=a31,c=us  --> branch.provo.a31.us
- * @param string server DN
- * @return string domain name
- */
-global define string GetDomainName(string dn) {
-	y2debug("dn: %1", dn);
-	if (dn == nil || dn == "") return "";
-
-	// tokenize the dn using the ',' char
-	list<string> tmplist = splitstring(dn, ",");
-
-	// remove all 'cn=', 'ou=', etc.
-	list<string> newlist = [];
-	foreach(string tmpstr, tmplist, {
-		tmpstr = regexpsub(tmpstr, ".*=(.*)", "\\1");
-		newlist = add(newlist, tmpstr);
-	});
-
-	// remove the first 2 elements from the list
-	//newlist = remove(newlist, 0);
-	//newlist = remove(newlist, 0);
-
-	// add a '.' char between each token
-	string loc =  mergestring(newlist, ".");
-	y2milestone("location: %1", loc);
-	return loc;
-}
-
-
-/**
- * Removes the values for a key in a list of object values.
- * @param string key, list <list <string> > object
- * @return list <list <string> > value
- */
-global list <list <string> > removeObjectValues(string key, list <list <string> > ldap_object) {
-	y2milestone("removeObjectValues(%1, %2)", key, ldap_object);
-
-	if (key == nil || key == "") {
-		y2milestone("removeObjectValues returned: %1", ldap_object);
-		return ldap_object;
-	}
-
-	ldap_object = filter(list <string> valuePair, ldap_object, { return (valuePair[0]:"" != key); });
-	
-	y2milestone("removeObjectValues returned: %1", ldap_object);
-	return ldap_object;
-}
-
-
-/**
- * Sets the values for a key in a list of object values.
- * @param string key, list <list <string> > object
- * @return list <list <string> > modified object values list
- */
-global list <list <string> > setObjectValues(string key, string value, list <list <string> > ldap_object) {
-	y2milestone("setObjectValue(%1, %2, %3)", key, value, ldap_object);
-	ldap_object = removeObjectValues(key, ldap_object);
-	ldap_object = add(ldap_object, [key, value]);
-	y2milestone("setObjectValues returned: %1", ldap_object);
-	return ldap_object;
-}
-
-/**
- * Returns the values for a key in a list of object values.
- * @param string key, list <list <string> > object
- * @return list<string> object values
- */
-global list<string> getObjectValues(string key, list <list <string> > ldap_object) {
-	list<string> retval = [];
-	if (key == nil || key == "") return retval;
-	foreach(list <string> valuePair, ldap_object, {
-		if (valuePair[0]:"" == key)
-			retval = add(retval, (string)valuePair[1]:"");
-	});
-	if (key == "objectClass") retval = filter (string class, retval, { return (tolower(class) != "top"); }); // remove 'top' from the list if the key is objectClass
-	return retval;
-}
-
-/**
- * Returns the FIRST value for a key in the a list of object values.
- * NOTE: Use getObjectValues to return a list<string> of all the values for a given key!
- * @param string key(DN), list <list <string> > ldap_object
- * @return string first value in list of values
- */
-global string getObjectValue(string key, list <list <string> > ldap_object) {
-	list<string> retval = getObjectValues(key, ldap_object);
-	return retval[0]:"";
-}
-
-
-/**
- * Returns a list containing all of the attributes(key/value) for a specific LDAP object in a list of LDAP objects
- * @param string object key (DN), list <list <list <string> > >
- * @return list <list <string> >
- */
-global list <list <string> > getObjectFromList(string object_key, list <list <list <string> > > objectList) {
-	list <list <string> > retval = [];
-	if (object_key == nil || object_key == "") return retval;
-	foreach(list <list <string> > object, objectList, {
-		string objectValue = getObjectValue("DN", object);
-		if (objectValue == object_key) {
-			retval = object;
-			return;
-		}
-	});
-	return retval;
-}
-
 
 /**
  * Removes an object from LDAP using posAdmin.pl
@@ -226,7 +114,7 @@ global boolean removeObjectFromLDAP(string dn, boolean recursive) {
 	map retmap = (map) SCR::Execute(.target.bash_output, cmd);
 	if (retmap["exit"]:-1 != 0) {
 		Popup::ClearFeedback();
-		SleposSystemManager::temp_ldap_object = SleposSystemManager::getObjectFromList(dn, known_ldap_objects); // grab the object from the list of LDAP objects	
+		temp_ldap_object = getObjectFromList(dn, known_ldap_objects); // grab the object from the list of LDAP objects	
 		string objectClass = getObjectValue("objectClass", temp_ldap_object);
 
 		// popup error message %1 is object class description (human readable)
@@ -635,13 +523,12 @@ global list <list <list <string> > > debugLDAP(string objectClass, string search
  * @param string ldap objectClass, string base for LDAP search (if empty or nil, will use the ALL_LDAPBASE), boolean dispalyUI for if this method should display a Popup::ShowFeedback message 
  * @return list [ list [ list [string, string] ] ]
  */
-global list <list <list <string> > > GetObjectsFromLDAP(string objectClass, string searchBase, boolean displayUI) {
+global list<list> GetObjectsFromLDAP(string objectClass, string searchBase, boolean displayUI) {
+
 	y2milestone("GetObjectFromLDAP(%1, %2, %3)", objectClass, searchBase, displayUI);
 
-
-	if (Mode::test())   // This is the correct code for SLES10
-		return debugLDAP(objectClass, searchBase); // FIXME: this line is for debugging only! Must be removed! SLES10
-
+	if (Mode::test())
+	    return debugLDAP(objectClass, searchBase);
 
 	string displayObjectClass = ReturnTextForObjectClass(objectClass);
 
@@ -665,7 +552,7 @@ global list <list <list <string> > > GetObjectsFromLDAP(string objectClass, stri
 	list<string> lines = splitstring(searchResult, "\n");
 	y2milestone("stdout=%1", lines);
 	
-	list<list < list<string> > > searchResultList = [];
+	list<list> searchResultList = [];
 	list<string> newResult = [];
 
 	foreach(string line, lines, {
@@ -713,24 +600,11 @@ y2internal ("FIXME original Strip function removed also \n....");
 
 
 /**
- * Returns the base of a given LDAP dn.
- * For example: cn=branch,ou=provo,o=novell,c=us -> ou=provo,o=novell,c=us
- * @param string dn
- * @return string base
- */
-global string getLdapBaseFromDn(string dn) {
-	if (dn == nil || dn == "") return "";
-	list<string> base = splitstring(dn, ",");
-	base = remove(base, 0); // remove the 1st element, leaving behind the base.
-	return mergestring(base, ",");
-}
-
-/**
  * Add/Modify an object to LDAP using posAdmin.pl
  * @param list <list <string> > settings for the ldap object
  * @return boolean true on success
  */
-global boolean modifyObjectToLDAP(list <list <string> > ldap_object) {
+global boolean modifyObjectToLDAP(list ldap_object) {
 	y2milestone("modifyObjectToLDAP(%1)", ldap_object);
 
 	string dn = getObjectValue("DN", ldap_object);
@@ -749,8 +623,8 @@ global boolean modifyObjectToLDAP(list <list <string> > ldap_object) {
 
 
 	// query for the object to be sure one does not already exist
-	list <list <list <string> > > current_objects = GetObjectsFromLDAP(objectClass, nil, false);
-	list <list <string> > values = getObjectFromList(dn, current_objects);
+	list <list> current_objects = GetObjectsFromLDAP(objectClass, nil, false);
+	list values = getObjectFromList(dn, current_objects);
 	boolean newObject = true;
 	if ( values != nil && size(values) > 0 ) newObject = false; // object already exists...lets modify it!
 
@@ -778,7 +652,7 @@ global boolean modifyObjectToLDAP(list <list <string> > ldap_object) {
 	
 
 	// add the object values to the end of the cmd
-	foreach(list<string> value, ldap_object, {
+	foreach(list<string> value, (list<list<string> >) ldap_object, {
 		if (value[0]:nil != nil && value[0]:"" != "" && value[1]:nil != nil && value[1]:"" != "") // only add the value WITH QUOTES ('') if the value is defined...don't add empty values with two single quotes ('').
 			cmd = sformat("%1 --%2 '%3'", cmd, value[0]:"", value[1]:"");
 		else if (newObject == false && value[0]:nil != nil && value[0]:"" != "" && (value[1]:nil == nil || value[1]:"" == "")) // if this is an EXISTING object and the key exists, but the value is empty add it WITHOUT the single quotes ('').  DO NOT DO THIS ON NEW OBJECTS. posAdmin.pl --add with throw an error!
@@ -809,7 +683,7 @@ global boolean modifyObjectToLDAP(list <list <string> > ldap_object) {
  * @param map with all the scLocation settings
  * @return boolean true on success
  */
-global boolean add_scLocation(list <list <string> > ldap_object) {
+global boolean add_scLocation(list ldap_object) {
 	Popup::ShowFeedback(_("Modifying Branch Location"), _("Please wait..."));
 	y2milestone("add_scLocation(%1)", ldap_object);
 	string location = getObjectValue("location", ldap_object);
@@ -839,6 +713,7 @@ global boolean add_scLocation(list <list <string> > ldap_object) {
 
 	string old_dn = getObjectValue("DN", ldap_object);
 	if (old_dn != nil && old_dn != "" && old_dn != new_dn) {
+	    y2warning ("FIXME");
 		// FIXME: must recursively change all the DN's for the all the subobects to this object so that they don't get lost!
 	}
 
@@ -856,7 +731,7 @@ global boolean add_scLocation(list <list <string> > ldap_object) {
  * @param map with all the scBranchServer settings
  * @return boolean true on success
  */
-global boolean add_scBranchServer(list <list <string> > ldap_object, string base) {
+global boolean add_scBranchServer(list ldap_object, string base) {
 	y2milestone("add_scBranchServer(%1, %2)", ldap_object, base);
 	string dn = getObjectValue("DN", ldap_object);
 	if (dn == nil || dn == "") { // New object
@@ -870,8 +745,8 @@ global boolean add_scBranchServer(list <list <string> > ldap_object, string base
 		// does a server container (scServerContainer) exist in this base
 		string container_dn = "";
 		// query for a server container to be sure one does not already exist
-		list <list <list <string> > > current_objects = GetObjectsFromLDAP("scServerContainer", base, false);
-		foreach( list <list <string> > server_container, current_objects, {
+		list <list> current_objects = GetObjectsFromLDAP("scServerContainer", base, false);
+		foreach( list server_container, current_objects, {
 			string tmp_container_dn = getObjectValue("DN", server_container);
 			if (regexpmatch(tmp_container_dn, sformat(".*%1", base))) { // NOTE: must make sure the base is correct. See bugzilla #146188
 				// server container found, don't create a new one.
@@ -938,9 +813,10 @@ global boolean Read() {
 	string password = (string)SCR::Read(.slepos_system_manager.POS_ADMIN_PASSWORD);
 	string base = (string)SCR::Read(.slepos_system_manager.ALL_LDAPBASE);
 	if (adminDN == nil || adminDN == "" || password == nil || password == "" || base == nil || base == "") {
-		// FIXME:  Must fix below error message to be more descriptive. Would be a good idea to point the user to the YaST module for posLDAPInit.pl
-		Report::Error(_("An error occured while reading the system manager settings.\n\nPlease ensure FIXME! (add name of the posLDAPInit.pl YaST module???) "));
-		return false;
+		// error message
+		Report::Error (sformat (_("An error occured while reading the system manager settings.\n\nPlease ensure %1 is installed."), "POS_Server-Admin2"));
+// FIXME just check for installed POS_Server-Admin2/ offer its installation
+//		return false;
 	}
 	SettingsMap["POS_ADMIN_DN"] = adminDN;
 	SettingsMap["POS_ADMIN_PASSWORD"] = password;

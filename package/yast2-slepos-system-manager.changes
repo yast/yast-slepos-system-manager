@@ -1,4 +1,12 @@
 -------------------------------------------------------------------
+Tue Jan 23 10:29:25 CET 2007 - jsuchome@suse.cz
+
+- fix to build for SLES10SP1
+- code cleanup
+- correct version number 
+- 2.13.0
+
+-------------------------------------------------------------------
 Wed Nov 16 12:46:28 2005 - mgfritch@novell.com
 
 - initial version

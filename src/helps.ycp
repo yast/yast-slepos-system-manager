@@ -82,6 +82,11 @@ _("<p><b><big>Selecting something:</big></b><br>
 It is not possible, you must code it first :-)
 </p>"),
 
+    "scLocation_details2"	: _("These settings are optional"),
+    "scWorkstation_details2"	: _("These settings are optional"),
+    "scWorkstation_details3"	: _("These settings are optional"),
+    "scConfigFileTemplate_details2"	: _("These settings are optional"),
+
 ];
 
 string HelpForDialog (string identification) {

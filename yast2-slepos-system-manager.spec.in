@@ -1,8 +1,11 @@
 @HEADER-COMMENT@
-# neededforbuild yast2-devel-packages yast2-country yast2-network yast2-installation
 
 @HEADER@
-Requires:	yast2 POS_Server-Admin2
+BuildRequires:	yast2 yast2-devtools yast2-testsuite doxygen perl-XML-Writer update-desktop-files
+
+Requires:	POS_Server-Admin2
+# Popup::ErrorDetails
+Requires:       yast2 >= 2.13.92
 
 BuildArchitectures:	noarch
 

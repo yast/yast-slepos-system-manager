@@ -14,7 +14,6 @@ textdomain "slepos-system-manager";
 import "Sequencer";
 import "Wizard";
 
-include "slepos-system-manager/complex.ycp";
 include "slepos-system-manager/dialogs.ycp";
 
 /**

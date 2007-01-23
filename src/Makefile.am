@@ -9,17 +9,16 @@ ynclude_DATA =			\
 	helps.ycp		\
 	wizards.ycp		\
 	dialogs.ycp		\
-	complex.ycp		\
 	subdialogs.ycp		\
 	subwizards.ycp		\
-	uifunctions.ycp	
+	uifunctions.ycp		\
+	routines.ycp
 
 desktop_DATA =			\
 	slepos-system-manager.desktop
 
 module_DATA =			\
-	SleposSystemManager.ycp	\
-	SleposValidators.ycp
+	SleposSystemManager.ycp
 
 EXTRA_DIST = $(client_DATA) $(ynclude_DATA) $(module_DATA) $(desktop_DATA)
 

@@ -29,28 +29,13 @@ import "Mode";
 import "CommandLine";
 include "slepos-system-manager/wizards.ycp";
 
-Mode::SetTest("test");  // SLES10 only
+Mode::SetTest("test"); // running with test data
 
 
 map cmdline_description = $[
-
-// FIXME: must return an error warning the user to the use the posAdmin.pl command line tools instead of YaST command line.
-
-    "id" 	: "slepos-system-manager",
-    /* Command line help text for the Xslepos-system-manager module */
+    // Command line help text for the slepos-system-manager module
     "help"	: _("Configuration of slepos-system-manager"),
     "guihandler"        : SleposSystemManagerSequence,
-    "initialize"        : SleposSystemManager::Read,
-    //"finish"            : SleposSystemManager::Write,
-    "actions"           : $[
-	// FIXME TODO: fill the functionality description here
-    ],
-    "options"		: $[
-	// FIXME TODO: fill the option descriptions here
-    ],
-    "mapping"		: $[
-	// FIXME TODO: fill the mappings of actions and options here
-    ]
 ];
 
 /* is this proposal or not? */
@@ -63,14 +48,22 @@ if(size(args) > 0) {
     }
 }
 
-/* main ui function */
 any ret = nil;
 
 if(propose) ret = SleposSystemManagerAutoSequence();
-else ret = CommandLine::Run(cmdline_description);
+else if (size(args) > 0)
+{
+    // FIXME this is not printed???
+    // command line message
+    CommandLine::Print (_("This YaST2 module does not support the command line interface.
+Use posAdmin.pl command line tool instead."));
+    ret	= `back;
+}
+else
+    ret = CommandLine::Run(cmdline_description);
+
 y2debug("ret=%1", ret);
 
-/* Finish */
 y2milestone("SleposSystemManager module finished");
 y2milestone("----------------------------------------");
 
